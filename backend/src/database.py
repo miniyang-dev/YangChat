@@ -1,9 +1,25 @@
 import aiosqlite
+from contextlib import asynccontextmanager
 from pathlib import Path
 from src.config import settings
 
 
+# W3: asynccontextmanager 版本，確保連線一定被關閉
+@asynccontextmanager
+async def get_db_ctx():
+    """Async context manager — 確保連線一定被關閉，防止洩漏"""
+    db = await aiosqlite.connect(settings.DB_PATH)
+    db.row_factory = aiosqlite.Row
+    await db.execute("PRAGMA journal_mode=WAL")
+    await db.execute("PRAGMA foreign_keys=ON")
+    try:
+        yield db
+    finally:
+        await db.close()
+
+
 async def get_db() -> aiosqlite.Connection:
+    """FastAPI Depends 用的裸連線版本（deps.py 的 db_dep 負責關閉）"""
     db = await aiosqlite.connect(settings.DB_PATH)
     db.row_factory = aiosqlite.Row
     await db.execute("PRAGMA journal_mode=WAL")

@@ -19,28 +19,54 @@ export function Login() {
         localStorage.setItem("token", res.token);
         navigate("/", { replace: true });
       } else {
-        setError(res.message || "登入失敗");
+        // 統一顯示友善訊息，不洩漏後端細節
+        setError("帳號或密碼錯誤");
       }
     } catch {
-      setError("無法連線到伺服器");
+      // F-C1 (login): 統一友善訊息
+      setError("帳號或密碼錯誤");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-      <div className="bg-gray-800 rounded-2xl p-8 w-full max-w-sm shadow-xl">
-        <h1 className="text-2xl font-bold text-white mb-2 text-center">YangChat</h1>
-        <p className="text-gray-400 text-sm text-center mb-8">請先登入</p>
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: "#08090a" }}>
+      <div
+        className="w-full max-w-sm rounded-2xl p-10 shadow-2xl"
+        style={{
+          backgroundColor: "#111219",
+          border: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="text-[#5e6ad2] text-3xl mb-3 select-none">✦</div>
+          <h1
+            className="text-[24px] font-semibold tracking-tight"
+            style={{ color: "#f0f1f3", letterSpacing: "-0.03em" }}
+          >
+            YangChat
+          </h1>
+          <p className="text-[13px] mt-1.5" style={{ color: "#62666d" }}>
+            請先登入以繼續
+          </p>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
           <input
             type="text"
             placeholder="帳號"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full bg-gray-700 text-gray-100 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-500"
+            className="w-full rounded-lg px-4 py-3 text-sm outline-none transition-colors"
+            style={{
+              backgroundColor: "#0d0e14",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: "#f0f1f3",
+            }}
+            onFocus={(e) => (e.target.style.borderColor = "#5e6ad2")}
+            onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.08)")}
             required
           />
           <input
@@ -48,14 +74,32 @@ export function Login() {
             placeholder="密碼"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-gray-700 text-gray-100 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-500"
+            className="w-full rounded-lg px-4 py-3 text-sm outline-none transition-colors"
+            style={{
+              backgroundColor: "#0d0e14",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: "#f0f1f3",
+            }}
+            onFocus={(e) => (e.target.style.borderColor = "#5e6ad2")}
+            onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.08)")}
             required
           />
-          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+
+          {error && (
+            <p className="text-red-400 text-sm text-center">{error}</p>
+          )}
+
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-lg py-3 text-sm font-medium transition-colors disabled:opacity-50"
+            className="w-full rounded-lg py-3 text-sm font-medium text-white transition-all duration-150 disabled:opacity-50 mt-2"
+            style={{ backgroundColor: "#5e6ad2" }}
+            onMouseEnter={(e) => {
+              if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = "#6e7ae0";
+            }}
+            onMouseLeave={(e) => {
+              (e.target as HTMLButtonElement).style.backgroundColor = "#5e6ad2";
+            }}
           >
             {loading ? "登入中..." : "登入"}
           </button>

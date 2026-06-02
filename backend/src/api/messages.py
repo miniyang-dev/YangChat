@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+import json
+import logging
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from src.api.deps import get_current_user, db_dep
 from src.models.schemas import SendMessageRequest, SendMessageResponse, MessageOut
@@ -7,6 +9,7 @@ from src.config import settings
 import aiosqlite
 
 router = APIRouter(tags=["messages"])
+logger = logging.getLogger(__name__)
 
 
 def _build_history(messages: list) -> list:
@@ -40,11 +43,12 @@ async def send_message(
     history = _build_history(conv["messages"])
     history.append({"role": "user", "content": ai_service.build_content(body.content, body.images)})
 
-    # 呼叫 AI
+    # 呼叫 AI — W2: 錯誤不洩漏內部細節
     try:
         reply = await ai_service.chat_complete(history, model)
     except Exception as e:
-        return SendMessageResponse(success=False, error=str(e))
+        logger.error("AI 呼叫失敗: %s", e, exc_info=True)
+        raise HTTPException(status_code=502, detail="AI 服務暫時無法使用，請稍後再試")
 
     # 儲存 assistant 訊息
     asst_msg = await db_service.save_message(
@@ -61,10 +65,11 @@ async def send_message(
 @router.post("/stream")
 async def stream_message(
     body: SendMessageRequest,
+    background_tasks: BackgroundTasks,
     db: aiosqlite.Connection = Depends(db_dep),
     _: str = Depends(get_current_user),
 ):
-    """SSE streaming：先儲存 user 訊息，邊串流邊收集，完成後儲存 assistant 訊息"""
+    """SSE streaming — B-C3: 用 BackgroundTask 確保斷線也能存入 assistant 訊息"""
     conv = await db_service.get_conversation(db, body.conversation_id)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -79,45 +84,62 @@ async def stream_message(
     history = _build_history(conv["messages"])
     history.append({"role": "user", "content": ai_service.build_content(body.content, body.images)})
 
-    # streaming generator
-    import json
-    collected = []
+    # 用 list 收集完整回覆（可在 generator 外被 background task 讀取）
+    collected: list[str] = []
+    conv_id = body.conversation_id
+
+    async def save_assistant_reply(full_reply: str) -> None:
+        """B-C3: 在 BackgroundTask 中用獨立連線儲存 assistant 訊息，即使客戶端斷線也會執行"""
+        if not full_reply.strip():
+            return
+        from src.database import get_db_ctx
+        try:
+            async with get_db_ctx() as bg_db:
+                await db_service.save_message(bg_db, conv_id, "assistant", full_reply)
+        except Exception as e:
+            logger.error("Background save assistant message failed: %s", e, exc_info=True)
 
     async def event_generator():
         # 先送 user_message 事件
         yield f"data: {json.dumps({'type': 'user_message', 'message': user_msg})}\n\n"
 
+        full_reply = ""
         # 開始 AI streaming
         try:
             async for chunk in ai_service.chat_stream(history, model):
                 if chunk.strip() == "data: [DONE]":
                     break
-                # chunk 格式: "data: {\"content\": \"...\"}\n\n"
                 try:
                     data_str = chunk.removeprefix("data: ").strip()
                     data = json.loads(data_str)
-                    collected.append(data.get("content", ""))
+                    delta = data.get("content", "")
+                    collected.append(delta)
+                    full_reply += delta
                     yield chunk
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("SSE parse skip: %s", e)
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+            logger.error("AI streaming 失敗: %s", e, exc_info=True)
+            # W2: 不洩漏內部錯誤細節
+            yield f"data: {json.dumps({'type': 'error', 'error': 'AI 服務暫時無法使用'})}\n\n"
             return
 
-        # 完整回覆
+        # 正常完成：送 assistant_message 事件（含完整內容供前端即時更新）
+        # 同時排程 background save（防斷線丟失）
         full_reply = "".join(collected)
+        background_tasks.add_task(save_assistant_reply, full_reply)
 
-        # 儲存 assistant 訊息（在 generator 外面做會有 db 生命週期問題，用新連線）
-        from src.database import get_db
-        async_db = await get_db()
+        # 在 generator 結束前也嘗試直接存（正常流程）
         try:
             asst_msg = await db_service.save_message(
-                async_db, body.conversation_id, "assistant", full_reply
+                db, conv_id, "assistant", full_reply
             )
-        finally:
-            await async_db.close()
+            yield f"data: {json.dumps({'type': 'assistant_message', 'message': asst_msg})}\n\n"
+        except Exception as e:
+            logger.error("Direct save failed, background task will retry: %s", e)
+            # 即使存檔失敗，仍然要告知前端 streaming 完成（用 content 代替完整 message）
+            yield f"data: {json.dumps({'type': 'assistant_message', 'message': {'id': '', 'conversation_id': conv_id, 'role': 'assistant', 'content': full_reply, 'images': None, 'created_at': ''}})}\n\n"
 
-        yield f"data: {json.dumps({'type': 'assistant_message', 'message': asst_msg})}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

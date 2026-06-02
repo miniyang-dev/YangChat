@@ -11,10 +11,22 @@ export function ModelSelector({ models, selected, onChange }: Props) {
     <select
       value={selected}
       onChange={(e) => onChange(e.target.value)}
-      className="bg-gray-700 text-gray-100 text-sm rounded px-2 py-1 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+      className="bg-transparent text-[13px] rounded-lg px-3 py-1.5 cursor-pointer outline-none transition-colors"
+      style={{
+        color: "#9499a5",
+        border: "1px solid rgba(255,255,255,0.08)",
+      }}
+      onMouseEnter={(e) =>
+        ((e.currentTarget as HTMLSelectElement).style.borderColor =
+          "rgba(255,255,255,0.15)")
+      }
+      onMouseLeave={(e) =>
+        ((e.currentTarget as HTMLSelectElement).style.borderColor =
+          "rgba(255,255,255,0.08)")
+      }
     >
       {models.map((m) => (
-        <option key={m.id} value={m.id}>
+        <option key={m.id} value={m.id} style={{ backgroundColor: "#0f1011", color: "#f0f1f3" }}>
           {m.name}
         </option>
       ))}

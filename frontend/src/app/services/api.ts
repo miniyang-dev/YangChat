@@ -33,6 +33,10 @@ export async function login(username: string, password: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
   });
+  // F-C1 (login): 不把後端原始錯誤訊息曝光給 UI
+  if (!res.ok) {
+    throw new Error("LOGIN_FAILED");
+  }
   return res.json();
 }
 
@@ -90,7 +94,8 @@ export function streamMessage(
   onUserMessage: (msg: Message) => void,
   onAssistantMessage: (msg: Message) => void,
   onDone: () => void,
-  onError: (err: string) => void
+  onError: (err: string) => void,
+  onToolUse?: (tools: string[]) => void,
 ): AbortController {
   const controller = new AbortController();
 
@@ -103,7 +108,21 @@ export function streamMessage(
         signal: controller.signal,
       });
 
-      const reader = res.body!.getReader();
+      // F-C1: 先檢查 HTTP 狀態，防止把錯誤頁當 SSE 解析
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          window.location.href = "/login";
+        }
+        onError(`伺服器錯誤 (HTTP ${res.status})`);
+        return;
+      }
+      if (!res.body) {
+        onError("No response body");
+        return;
+      }
+
+      const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
 
@@ -126,8 +145,12 @@ export function streamMessage(
             if (parsed.type === "user_message") onUserMessage(parsed.message);
             else if (parsed.type === "assistant_message") onAssistantMessage(parsed.message);
             else if (parsed.type === "error") onError(parsed.error);
+            else if (parsed.tool_use) onToolUse?.(parsed.tool_use);
             else if (parsed.content) onChunk(parsed.content);
-          } catch {}
+          } catch (e) {
+            // F-S: 開發模式下輸出 parse 警告
+            if (import.meta.env.DEV) console.warn("SSE parse error:", e, data);
+          }
         }
       }
       onDone();

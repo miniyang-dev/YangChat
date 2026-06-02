@@ -6,11 +6,13 @@ export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [toolStatus, setToolStatus] = useState<string>("");   // 「🔍 搜尋中...」
   const abortRef = useRef<AbortController | null>(null);
 
   const setHistory = useCallback((msgs: Message[]) => {
     setMessages(msgs);
     setStreamingText("");
+    setToolStatus("");
   }, []);
 
   const sendStream = useCallback(
@@ -21,8 +23,10 @@ export function useChat() {
       model: string | undefined,
       onNewConv?: (msg: Message) => void
     ) => {
+      abortRef.current?.abort();
       setStreaming(true);
       setStreamingText("");
+      setToolStatus("");
       let accum = "";
 
       abortRef.current = api.streamMessage(
@@ -33,6 +37,7 @@ export function useChat() {
         (chunk) => {
           accum += chunk;
           setStreamingText(accum);
+          setToolStatus("");   // 收到文字就清掉「搜尋中」提示
         },
         (userMsg) => {
           setMessages((prev) => [...prev, userMsg]);
@@ -41,13 +46,21 @@ export function useChat() {
         (assistantMsg) => {
           setMessages((prev) => [...prev, assistantMsg]);
           setStreamingText("");
+          setToolStatus("");
           setStreaming(false);
         },
         () => setStreaming(false),
         (err) => {
           console.error("stream error:", err);
           setStreaming(false);
-        }
+          setToolStatus("");
+        },
+        (tools) => {
+          // 收到 tool_use 事件，顯示「正在搜尋...」
+          setToolStatus(`🔍 正在搜尋：${tools.join("、")}`);
+          setStreamingText("");   // 清掉之前的文字（搜尋前沒有文字）
+          accum = "";
+        },
       );
     },
     []
@@ -55,8 +68,11 @@ export function useChat() {
 
   const abort = useCallback(() => {
     abortRef.current?.abort();
+    abortRef.current = null;
     setStreaming(false);
+    setStreamingText("");
+    setToolStatus("");
   }, []);
 
-  return { messages, streamingText, streaming, setHistory, sendStream, abort };
+  return { messages, streamingText, toolStatus, streaming, setHistory, sendStream, abort };
 }

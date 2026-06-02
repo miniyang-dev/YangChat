@@ -1,9 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+* { box-sizing: border-box; }
+
 html, body, #root {
   height: 100%;
-  background-color: #111827;
-  color: #f9fafb;
+  background-color: #08090a;
+  color: #f0f1f3;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* Thin custom scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+
+/* prose overrides for dark theme */
+.prose { color: #d0d4dc; }
+.prose strong { color: #f0f1f3; }
+.prose code { background: rgba(255,255,255,0.08); border-radius: 4px; padding: 1px 5px; font-size: 0.85em; color: #a8b4ff; }
+.prose pre { background: #111219 !important; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; }
+.prose h1,.prose h2,.prose h3 { color: #f0f1f3; letter-spacing: -0.02em; }
+.prose a { color: #7170ff; }
+.prose table { border-collapse: collapse; }
+.prose th { background: rgba(255,255,255,0.05); color: #9499a5; font-size: 12px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+.prose td, .prose th { border: 1px solid rgba(255,255,255,0.08); padding: 8px 12px; }
+.prose blockquote { border-left: 2px solid #5e6ad2; color: #9499a5; background: rgba(94,106,210,0.06); border-radius: 0 6px 6px 0; padding: 8px 14px; margin-left: 0; }
+.prose hr { border-color: rgba(255,255,255,0.08); }
+.prose ul li::marker { color: #5e6ad2; }

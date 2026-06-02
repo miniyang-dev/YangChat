@@ -1,0 +1,20 @@
+services:
+  backend:
+    build: ./backend
+    env_file: .env
+    volumes:
+      - chat_data:/data
+    restart: unless-stopped
+    expose:
+      - "8000"
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  chat_data:

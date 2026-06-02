@@ -99,8 +99,8 @@ PIONEER_BASE_URL=https://api.pioneer.ai/v1
 DEFAULT_MODEL=claude-sonnet-4-6
 
 # 認證（請改成自己的帳密）
-CHAT_USERNAME=yang
-CHAT_PASSWORD=your_strong_password
+CHAT_USERNAME=your_username
+CHAT_PASSWORD=your_s...n
 
 # JWT Secret（至少 32 字元的隨機字串）
 JWT_SECRET=your-random-secret-at-least-32-chars

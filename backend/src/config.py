@@ -12,8 +12,8 @@ class Settings(BaseSettings):
     # Auth（單一使用者）
     JWT_SECRET: str = "change-me-in-production"
     JWT_EXPIRATION_HOURS: int = 24
-    CHAT_USERNAME: str = "admin"
-    CHAT_PASSWORD: str = "admin"
+    CHAT_USERNAME: str = ""
+    CHAT_PASSWORD: str = ""
 
     # DB
     DB_PATH: str = "/data/yangchat.db"

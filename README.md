@@ -1,6 +1,6 @@
 # YangChat
 
-個人 AI 聊天應用，透過 [Pioneer AI](https://api.pioneer.ai) 存取多款 LLM，支援網路即時搜尋、串流回覆、對話歷史管理。
+個人 AI 聊天應用，透過 [Pioneer AI](https://api.pioneer.ai) 存取多款 LLM，支援網路即時搜尋、串流回覆、對話歷史管理、**檔案上傳解析**與 **PPTX 匯出**。
 
 ---
 
@@ -13,6 +13,8 @@
 - **JWT 認證**：單一帳號登入保護，token 24 小時有效
 - **Linear 風格 UI**：深色現代介面，Inter 字體，indigo 主題色
 - **全 Docker 部署**：一行指令啟動，nginx 反向代理前後端
+- **📎 檔案上傳**：上傳 PDF、Word、PowerPoint、TXT、Markdown、CSV 作為 AI 的 context
+- **📊 PPTX 匯出**：一鍵讓 AI 將對話內容生成 PowerPoint 簡報並下載
 
 ---
 
@@ -25,10 +27,14 @@ YangChat/
 │   │   ├── api/
 │   │   │   ├── auth.py       # JWT 登入 / 登出
 │   │   │   ├── conversations.py  # 對話 CRUD
-│   │   │   ├── messages.py   # 訊息發送、串流
-│   │   │   └── models.py     # 可用模型清單
+│   │   │   ├── messages.py   # 訊息發送、串流（支援 file_context）
+│   │   │   ├── models.py     # 可用模型清單
+│   │   │   ├── upload.py     # POST /api/upload（檔案解析）
+│   │   │   └── export.py     # POST /api/export/pptx（PPTX 產出）
 │   │   ├── services/
-│   │   │   └── ai_service.py # Pioneer AI 整合、Function Calling、Tavily 搜尋
+│   │   │   ├── ai_service.py # Pioneer AI 整合、Function Calling、Tavily 搜尋
+│   │   │   ├── file_service.py   # 解析 PDF/PPTX/DOCX/TXT/MD/CSV → 純文字
+│   │   │   └── export_service.py # AI JSON → .pptx 組裝
 │   │   ├── models/
 │   │   │   └── schemas.py    # Pydantic 資料模型
 │   │   ├── config.py         # 環境設定（pydantic-settings）
@@ -40,18 +46,18 @@ YangChat/
 │   ├── src/app/
 │   │   ├── components/
 │   │   │   ├── ChatWindow.tsx     # 對話區（訊息列表）
-│   │   │   ├── InputBar.tsx       # 輸入框（含圖片上傳）
+│   │   │   ├── InputBar.tsx       # 輸入框（圖片上傳 + 文件上傳）
 │   │   │   ├── MessageBubble.tsx  # 訊息氣泡（user / AI）
 │   │   │   ├── StreamingBubble.tsx # 串流中的 AI 回覆
 │   │   │   ├── Sidebar.tsx        # 對話清單側邊欄
 │   │   │   └── ModelSelector.tsx  # 模型下拉選單
 │   │   ├── pages/
 │   │   │   ├── Login.tsx          # 登入頁
-│   │   │   └── Chat.tsx           # 主聊天頁
+│   │   │   └── Chat.tsx           # 主聊天頁（含 PPTX 匯出按鈕）
 │   │   ├── hooks/
 │   │   │   └── useChat.ts         # 對話狀態管理
 │   │   └── services/
-│   │       └── api.ts             # API 呼叫封裝
+│   │       └── api.ts             # API 呼叫封裝（含 uploadFile / exportPptx）
 │   ├── nginx.conf            # SPA fallback + API 反向代理
 │   └── Dockerfile            # 多階段建構（Node build → nginx serve）
 │
@@ -69,6 +75,8 @@ YangChat/
 | 即時搜尋 | Tavily Search API |
 | 資料庫 | SQLite + aiosqlite |
 | 認證 | JWT (python-jose) |
+| PDF 解析 | pymupdf |
+| Office 解析 | python-pptx, python-docx |
 | 前端框架 | React 18 + TypeScript + Vite |
 | 樣式 | Tailwind CSS + Linear 設計系統 |
 | Markdown | react-markdown + remark-gfm |
@@ -100,7 +108,7 @@ DEFAULT_MODEL=claude-sonnet-4-6
 
 # 認證（請改成自己的帳密）
 CHAT_USERNAME=your_username
-CHAT_PASSWORD=your_s...n
+CHAT_PASSWORD=your_secure_password
 
 # JWT Secret（至少 32 字元的隨機字串）
 JWT_SECRET=your-random-secret-at-least-32-chars
@@ -139,6 +147,34 @@ docker compose up -d --build
 
 ---
 
+## 檔案上傳
+
+輸入框左側的 **📄 文件圖示按鈕**，可上傳文件作為 AI context：
+
+| 格式 | 副檔名 | 解析方式 |
+|------|--------|---------|
+| PDF | `.pdf` | pymupdf（逐頁提取，支援中文） |
+| PowerPoint | `.pptx` | python-pptx（逐張投影片） |
+| Word | `.docx` | python-docx（段落 + 表格） |
+| 純文字 | `.txt` | UTF-8 / Big5 自動偵測 |
+| Markdown | `.md` | 直接讀取 |
+| CSV | `.csv` | 轉成易讀的欄位=值格式 |
+
+**限制：** 10MB / 20,000 字元截斷
+
+上傳後顯示「已附加 `檔名` — N 字元」標籤，發送訊息時自動附帶文件內容。
+
+---
+
+## PPTX 匯出
+
+對話進行中，Header 右側出現「**匯出 PPTX**」按鈕：
+
+1. 點擊按鈕 → AI 根據最後一則回覆自動產生投影片結構（5 頁）
+2. 下載 `yangchat-export.pptx`，可用 PowerPoint / Keynote 開啟
+
+---
+
 ## AI 搜尋機制
 
 採用 **OpenAI Function Calling** 方式整合：
@@ -161,7 +197,9 @@ docker compose up -d --build
 | POST | `/api/conversations` | 建立新對話 |
 | DELETE | `/api/conversations/{id}` | 刪除對話 |
 | GET | `/api/conversations/{id}/messages` | 取得對話訊息 |
-| POST | `/api/messages/stream` | 送出訊息（SSE 串流回覆） |
+| POST | `/api/messages/stream` | 送出訊息（SSE 串流，支援 file_context） |
+| POST | `/api/upload` | 上傳文件，回傳解析後文字 |
+| POST | `/api/export/pptx` | AI 產生投影片並下載 .pptx |
 
 所有 `/api/*`（除 `/api/auth/login`）均需帶 `Authorization: Bearer <token>`。
 
@@ -188,6 +226,13 @@ npm run dev   # 開啟 http://localhost:5173
 ```
 
 前端 `vite.config.ts` 已設定 proxy，將 `/api/*` 轉發到 `http://localhost:8000`。
+
+### 執行測試
+
+```bash
+cd backend/src
+python -m pytest tests/ -v
+```
 
 ---
 

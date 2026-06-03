@@ -26,7 +26,7 @@ export function ChatWindow({ messages, streamingText, toolStatus, isStreaming }:
             className="font-medium mb-1"
             style={{ fontSize: "18px", color: "#f0f1f3" }}
           >
-            YangChat
+            Yang
           </p>
           <p className="text-[14px]" style={{ color: "#62666d" }}>
             問我任何事

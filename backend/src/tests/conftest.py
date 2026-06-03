@@ -3,7 +3,7 @@ import asyncio
 import pytest
 
 os.environ.setdefault("PIONEER_API_KEY", "test-key")
-os.environ.setdefault("JWT_SECRET", "test-secret")
+os.environ.setdefault("JWT_SECRET", "test-secret-for-unit-tests-minimum-32-chars!!")
 os.environ.setdefault("CHAT_USERNAME", "admin")
 os.environ.setdefault("CHAT_PASSWORD", "admin")
 os.environ.setdefault("DB_PATH", "/tmp/yangchat_test.db")

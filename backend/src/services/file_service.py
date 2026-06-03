@@ -183,7 +183,7 @@ async def describe_image(image_bytes: bytes, content_type: str, api_key: str) ->
         }
     }
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(url, json=payload)

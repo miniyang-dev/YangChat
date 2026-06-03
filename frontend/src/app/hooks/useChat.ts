@@ -7,12 +7,15 @@ export function useChat() {
   const [streaming, setStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [toolStatus, setToolStatus] = useState<string>("");   // 「🔍 搜尋中...」
+  // FC-2: stream 錯誤要顯示給使用者
+  const [streamError, setStreamError] = useState<string>("");
   const abortRef = useRef<AbortController | null>(null);
 
   const setHistory = useCallback((msgs: Message[]) => {
     setMessages(msgs);
     setStreamingText("");
     setToolStatus("");
+    setStreamError("");
   }, []);
 
   const sendStream = useCallback(
@@ -28,6 +31,7 @@ export function useChat() {
       setStreaming(true);
       setStreamingText("");
       setToolStatus("");
+      setStreamError("");
       let accum = "";
 
       abortRef.current = api.streamMessage(
@@ -52,9 +56,12 @@ export function useChat() {
         },
         () => setStreaming(false),
         (err) => {
+          // FC-2: 不只 console.error，要設定 error state 讓 UI 顯示
           console.error("stream error:", err);
+          setStreamError("訊息傳送失敗，請重試");
           setStreaming(false);
           setToolStatus("");
+          setStreamingText("");
         },
         (tools) => {
           // 收到 tool_use 事件，顯示「正在搜尋...」
@@ -76,5 +83,5 @@ export function useChat() {
     setToolStatus("");
   }, []);
 
-  return { messages, streamingText, toolStatus, streaming, setHistory, sendStream, abort };
+  return { messages, streamingText, toolStatus, streaming, streamError, setHistory, sendStream, abort };
 }

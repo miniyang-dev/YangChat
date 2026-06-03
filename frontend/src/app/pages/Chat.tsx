@@ -12,8 +12,8 @@ import { Download } from "lucide-react";
 
 export function Chat() {
   const navigate = useNavigate();
-  const { conversations, setConversations, load, remove } = useConversations();
-  const { messages, streamingText, toolStatus, streaming, setHistory, sendStream, abort } = useChat();
+  const { conversations, setConversations, loadError, load, remove } = useConversations();
+  const { messages, streamingText, toolStatus, streaming, streamError, setHistory, sendStream, abort } = useChat();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [selectedModel, setSelectedModel] = useState("claude-sonnet-4-6");
@@ -37,9 +37,10 @@ export function Chat() {
       });
   }, [load]);
 
-  // 切換對話 — F-C3: race condition 防護
+  // 切換對話 — FC-1: 先 abort 舊 stream，FC-3 race condition 防護
   const selectConversation = useCallback(
     async (id: string) => {
+      abort(); // FC-1: 先 abort 舊 stream，防止舊對話訊息追加到新對話
       setActiveId(id);
       activeIdRef.current = id;
       try {
@@ -53,7 +54,7 @@ export function Chat() {
         console.error("載入對話失敗", err);
       }
     },
-    [setHistory]
+    [setHistory, abort]
   );
 
   // 刪除對話
@@ -146,7 +147,8 @@ export function Chat() {
       a.href = url;
       a.download = "yangchat-export.pptx";
       a.click();
-      URL.revokeObjectURL(url);
+      // FW-6: setTimeout 避免 Safari 在下載觸發前就 revoke
+      setTimeout(() => URL.revokeObjectURL(url), 100);
     } catch (err: unknown) {
       setPptxError((err as Error).message || "匯出失敗");
       setTimeout(() => setPptxError(""), 4000);
@@ -163,6 +165,7 @@ export function Chat() {
         onSelect={selectConversation}
         onDelete={handleDelete}
         onNew={handleNew}
+        loadError={loadError}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -229,6 +232,11 @@ export function Chat() {
         </div>
 
         {/* 訊息區 */}
+        {streamError && (
+          <div className="px-6 py-2" style={{ backgroundColor: "rgba(239,68,68,0.1)", borderBottom: "1px solid rgba(239,68,68,0.2)" }}>
+            <p className="text-red-400 text-sm text-center">{streamError}</p>
+          </div>
+        )}
         <ChatWindow
           messages={messages}
           streamingText={streamingText}

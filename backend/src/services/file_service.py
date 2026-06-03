@@ -183,10 +183,11 @@ async def describe_image(image_bytes: bytes, content_type: str, api_key: str) ->
         }
     }
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(url, json=payload)
+        # W-2: API key 用 header 傳送，避免出現在 access log / URL 中
+        resp = await client.post(url, json=payload, headers={"x-goog-api-key": api_key})
         resp.raise_for_status()
         data = resp.json()
 

@@ -3,18 +3,21 @@ export.py — AI 產出 PPTX API
 POST /api/export/pptx → AI 產生投影片 JSON → 組裝 .pptx → 回傳下載
 """
 import json
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from src.api.deps import get_current_user
 from src.services.export_service import build_pptx
 from src.services.ai_service import chat_complete
+from src.config import settings
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class PptxRequest(BaseModel):
-    prompt: str = Field(..., description="使用者需求，例如「幫我做5頁關於AI的行銷簡報」")
+    prompt: str = Field(..., description="使用者需求，例如「幫我做5頁關於AI的行銷簡報」", max_length=2000)
     slide_count: int = Field(default=5, ge=1, le=20, description="投影片張數（1-20）")
 
 
@@ -42,7 +45,7 @@ async def export_pptx(
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_msg},
     ]
-    full_response = await chat_complete(messages, model="claude-sonnet-4-6")
+    full_response = await chat_complete(messages, model=settings.DEFAULT_MODEL)
 
     # 清理可能的 markdown code block 包裝，再解析 JSON
     clean = full_response.strip()
@@ -54,9 +57,11 @@ async def export_pptx(
     try:
         slides_data = json.loads(clean)
     except json.JSONDecodeError:
+        # W-6: 不洩漏 AI 原始輸出給客戶端，只記錄在 log
+        logger.error("AI 回傳 JSON 解析失敗，原始回應: %s", full_response[:500])
         raise HTTPException(
             status_code=500,
-            detail=f"AI 回傳格式錯誤，請重試。原始回應：{full_response[:200]}"
+            detail="AI 回傳格式錯誤，請重試"
         )
 
     if not isinstance(slides_data, list):

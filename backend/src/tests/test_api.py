@@ -5,7 +5,8 @@ def test_health(client):
 
 
 def test_login_success(client):
-    resp = client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    from src.tests.conftest import _TEST_USERNAME, _TEST_PASSWORD
+    resp = client.post("/api/auth/login", json={"username": _TEST_USERNAME, "password": _TEST_PASSWORD})
     assert resp.status_code == 200
     data = resp.json()
     assert data["success"] is True

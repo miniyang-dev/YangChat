@@ -49,6 +49,12 @@ async def send_message(
 
     model = body.model or conv["model"] or settings.DEFAULT_MODEL
 
+    # W-4: 驗證 model 是否在白名單內
+    from src.services.ai_service import AVAILABLE_MODELS
+    valid_model_ids = {m["id"] for m in AVAILABLE_MODELS}
+    if body.model and body.model not in valid_model_ids:
+        raise HTTPException(status_code=400, detail=f"不支援的模型：{body.model}")
+
     # 儲存 user 訊息（DB 只存原始內容，file_context 不存）
     user_msg = await db_service.save_message(
         db, body.conversation_id, "user", body.content, body.images
@@ -93,6 +99,12 @@ async def stream_message(
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     model = body.model or conv["model"] or settings.DEFAULT_MODEL
+
+    # W-4: 驗證 model 是否在白名單內（stream 端點）
+    from src.services.ai_service import AVAILABLE_MODELS
+    valid_model_ids = {m["id"] for m in AVAILABLE_MODELS}
+    if body.model and body.model not in valid_model_ids:
+        raise HTTPException(status_code=400, detail=f"不支援的模型：{body.model}")
 
     # 儲存 user 訊息（DB 只存原始內容，file_context 不存進 DB 以免污染歷史）
     user_msg = await db_service.save_message(
@@ -146,19 +158,17 @@ async def stream_message(
             yield f"data: {json.dumps({'type': 'error', 'error': 'AI 服務暫時無法使用'})}\n\n"
             return
 
-        # 正常完成：送 assistant_message 事件（含完整內容供前端即時更新）
-        # 同時排程 background save（防斷線丟失）
+        # 正常完成：先嘗試直接存（正常流程），失敗才排程 background task（斷線保護）
         full_reply = "".join(collected)
-        background_tasks.add_task(save_assistant_reply, full_reply)
-
-        # 在 generator 結束前也嘗試直接存（正常流程）
         try:
             asst_msg = await db_service.save_message(
                 db, conv_id, "assistant", full_reply
             )
             yield f"data: {json.dumps({'type': 'assistant_message', 'message': asst_msg})}\n\n"
         except Exception as e:
-            logger.error("Direct save failed, background task will retry: %s", e)
+            logger.error("Direct save failed, falling back to background task: %s", e)
+            # C-1: 直接存失敗才 fallback 到 background task，避免雙重寫入
+            background_tasks.add_task(save_assistant_reply, full_reply)
             # 即使存檔失敗，仍然要告知前端 streaming 完成（用 content 代替完整 message）
             yield f"data: {json.dumps({'type': 'assistant_message', 'message': {'id': '', 'conversation_id': conv_id, 'role': 'assistant', 'content': full_reply, 'images': None, 'created_at': ''}})}\n\n"
 

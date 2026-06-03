@@ -7,9 +7,10 @@ interface Props {
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onNew: () => void;
+  loadError?: string;
 }
 
-export function Sidebar({ conversations, activeId, onSelect, onDelete, onNew }: Props) {
+export function Sidebar({ conversations, activeId, onSelect, onDelete, onNew, loadError }: Props) {
   return (
     <div
       className="w-[220px] flex-shrink-0 flex flex-col h-full"
@@ -49,7 +50,13 @@ export function Sidebar({ conversations, activeId, onSelect, onDelete, onNew }: 
 
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto px-2 space-y-0.5 pb-3">
-        {conversations.length === 0 && (
+        {/* FC-4: 載入失敗顯示錯誤，不再靜默 */}
+        {loadError && (
+          <p className="text-[12px] text-center mt-4 px-2" style={{ color: "#f87171" }}>
+            {loadError}
+          </p>
+        )}
+        {!loadError && conversations.length === 0 && (
           <p className="text-[12px] text-center mt-4" style={{ color: "#62666d" }}>
             尚無對話
           </p>

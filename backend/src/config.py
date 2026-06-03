@@ -42,5 +42,14 @@ class Settings(BaseSettings):
             raise ValueError("JWT_SECRET 長度至少需要 32 字元")
         return v
 
+    # C-2: 帳密不可為空字串，防止未設定時任何人可登入
+    @field_validator("CHAT_USERNAME", "CHAT_PASSWORD")
+    @classmethod
+    def credentials_must_be_set(cls, v: str, info) -> str:
+        if not v:
+            field = info.field_name
+            raise ValueError(f"{field} 不可為空，請在 .env 設定")
+        return v
+
 
 settings = Settings()

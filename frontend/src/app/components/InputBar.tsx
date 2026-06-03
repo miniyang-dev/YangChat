@@ -72,6 +72,21 @@ export function InputBar({ disabled, onSend }: Props) {
     if (!file) return;
     e.target.value = "";
 
+    // FC-3: client-side 大小驗證，不等到 server 才拒絕
+    const MAX_DOC_SIZE = 10 * 1024 * 1024; // 10MB
+    if (file.size > MAX_DOC_SIZE) {
+      setFileError("檔案大小不可超過 10MB");
+      return;
+    }
+
+    // 副檔名白名單驗證（accept 屬性可被繞過）
+    const ALLOWED_DOC_EXT = [".pdf", ".pptx", ".docx", ".txt", ".md", ".csv"];
+    const ext = "." + (file.name.split(".").pop()?.toLowerCase() ?? "");
+    if (!ALLOWED_DOC_EXT.includes(ext)) {
+      setFileError("不支援的檔案格式，請上傳 PDF、Word、PPTX、TXT、Markdown 或 CSV");
+      return;
+    }
+
     setUploading(true);
     setUploadedFile(null);
     try {
@@ -92,9 +107,24 @@ export function InputBar({ disabled, onSend }: Props) {
   // ── 圖片上傳（→ Gemini Flash 描述）────────────────────────────────────────
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setImageError("");
+    setImgError(""); // FW-7: imgError 現在用於圖片大小/格式錯誤（原先是 dead code）
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
+
+    // FC-3: client-side 大小驗證
+    const MAX_IMG_SIZE = 5 * 1024 * 1024; // 5MB
+    if (file.size > MAX_IMG_SIZE) {
+      setImgError("圖片大小不可超過 5MB");
+      return;
+    }
+
+    // MIME type 驗證
+    const ALLOWED_IMG_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (!ALLOWED_IMG_TYPES.includes(file.type)) {
+      setImgError("不支援的圖片格式，請上傳 JPEG、PNG、GIF 或 WebP");
+      return;
+    }
 
     setUploadingImage(true);
     setUploadedImage(null);
@@ -279,7 +309,6 @@ export function InputBar({ disabled, onSend }: Props) {
               data-testid="message-input"
               value={text}
               onChange={handleTextChange}
-              onInput={handleTextChange as unknown as React.FormEventHandler<HTMLTextAreaElement>}
               onKeyDown={handleKey}
               disabled={disabled}
               placeholder={placeholder}

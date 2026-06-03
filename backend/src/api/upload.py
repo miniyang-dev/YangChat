@@ -20,7 +20,11 @@ async def upload_file(
     上傳 PDF / PPTX / TXT / DOCX / MD / CSV 檔案。
     回傳解析後的純文字，供前端在發送訊息時作為 file_context 附帶。
     """
-    content = await file.read()
+    # C-3: 先讀 MAX_SIZE+1 bytes，避免全量讀入記憶體後才拒絕（OOM 防護）
+    MAX_DOC_BYTES = 10 * 1024 * 1024  # 10MB
+    content = await file.read(MAX_DOC_BYTES + 1)
+    if len(content) > MAX_DOC_BYTES:
+        raise HTTPException(status_code=413, detail="檔案超過 10MB 限制")
 
     try:
         text = extract_text(file.filename or "", content)
@@ -57,14 +61,21 @@ async def upload_image(
             detail=f"不支援的圖片格式：{content_type}，請上傳 JPEG / PNG / GIF / WebP"
         )
 
-    image_bytes = await file.read()
+    # C-3: 先讀 MAX_SIZE+1 bytes，避免全量讀入記憶體後才拒絕（OOM 防護）
+    MAX_IMG_BYTES = 5 * 1024 * 1024  # 5MB
+    image_bytes = await file.read(MAX_IMG_BYTES + 1)
+    if len(image_bytes) > MAX_IMG_BYTES:
+        raise HTTPException(status_code=413, detail="圖片超過 5MB 限制")
 
     try:
         description = await describe_image(image_bytes, content_type, settings.GEMINI_API_KEY)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"圖片分析失敗：{str(e)[:200]}")
+        # W-6: 不洩漏內部錯誤細節給客戶端
+        import logging
+        logging.getLogger(__name__).error("圖片分析失敗: %s", e, exc_info=True)
+        raise HTTPException(status_code=502, detail="圖片分析失敗，請稍後再試")
 
     preview = description[:300] + "..." if len(description) > 300 else description
 

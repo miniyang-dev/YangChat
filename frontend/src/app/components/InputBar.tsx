@@ -244,28 +244,30 @@ export function InputBar({ disabled, onSend }: Props) {
             }}
           >
             {/* 圖片上傳按鈕（→ Gemini 分析，永遠可用） */}
-            <button
-              type="button"
-              onClick={() => imgFileRef.current?.click()}
-              disabled={disabled || uploadingImage}
-              className="p-2 rounded-lg transition-all duration-150 flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
-              style={{ color: uploadedImage ? "#5e6ad2" : "#62666d" }}
+            <label
+              htmlFor="img-upload"
+              className="p-2 rounded-lg transition-all duration-150 flex-shrink-0 cursor-pointer"
+              style={{
+                color: uploadedImage ? "#5e6ad2" : "#62666d",
+                opacity: (disabled || uploadingImage) ? 0.3 : 1,
+                pointerEvents: (disabled || uploadingImage) ? "none" : "auto",
+              }}
               onMouseEnter={(e) => {
                 if (!disabled && !uploadingImage) {
-                  (e.currentTarget as HTMLButtonElement).style.color = "#9499a5";
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-                    "rgba(255,255,255,0.05)";
+                  (e.currentTarget as HTMLLabelElement).style.color = "#9499a5";
+                  (e.currentTarget as HTMLLabelElement).style.backgroundColor = "rgba(255,255,255,0.05)";
                 }
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.color = uploadedImage ? "#5e6ad2" : "#62666d";
-                (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
+                (e.currentTarget as HTMLLabelElement).style.color = uploadedImage ? "#5e6ad2" : "#62666d";
+                (e.currentTarget as HTMLLabelElement).style.backgroundColor = "transparent";
               }}
               title="上傳圖片（Gemini Flash 分析）"
             >
               <Paperclip size={18} />
-            </button>
+            </label>
             <input
+              id="img-upload"
               ref={imgFileRef}
               type="file"
               accept={ACCEPTED_IMAGE_TYPES}
@@ -274,28 +276,30 @@ export function InputBar({ disabled, onSend }: Props) {
             />
 
             {/* 文件上傳按鈕（PDF/DOCX/等） */}
-            <button
-              type="button"
-              onClick={() => docFileRef.current?.click()}
-              disabled={disabled || uploading}
-              className="p-2 rounded-lg transition-all duration-150 flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
-              style={{ color: uploadedFile ? "#5e6ad2" : "#62666d" }}
+            <label
+              htmlFor="doc-upload"
+              className="p-2 rounded-lg transition-all duration-150 flex-shrink-0 cursor-pointer"
+              style={{
+                color: uploadedFile ? "#5e6ad2" : "#62666d",
+                opacity: (disabled || uploading) ? 0.3 : 1,
+                pointerEvents: (disabled || uploading) ? "none" : "auto",
+              }}
               onMouseEnter={(e) => {
                 if (!disabled && !uploading) {
-                  (e.currentTarget as HTMLButtonElement).style.color = "#9499a5";
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-                    "rgba(255,255,255,0.05)";
+                  (e.currentTarget as HTMLLabelElement).style.color = "#9499a5";
+                  (e.currentTarget as HTMLLabelElement).style.backgroundColor = "rgba(255,255,255,0.05)";
                 }
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.color = uploadedFile ? "#5e6ad2" : "#62666d";
-                (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
+                (e.currentTarget as HTMLLabelElement).style.color = uploadedFile ? "#5e6ad2" : "#62666d";
+                (e.currentTarget as HTMLLabelElement).style.backgroundColor = "transparent";
               }}
               title="上傳文件（PDF、Word、PPTX、TXT、Markdown、CSV）"
             >
               <FileText size={18} />
-            </button>
+            </label>
             <input
+              id="doc-upload"
               ref={docFileRef}
               type="file"
               accept={ACCEPTED_DOC_TYPES}

@@ -1,0 +1,123 @@
+import { test, expect, type Page } from "@playwright/test";
+import path from "path";
+import fs from "fs";
+import os from "os";
+
+// 測試帳密（從環境變數讀，與 backend conftest 一致）
+const USERNAME = process.env.CHAT_USERNAME ?? "irene";
+const PASSWORD = process.env.CHAT_PASSWORD ?? "88888888";
+
+// 共用 login helper
+async function login(page: Page) {
+  await page.goto("/login");
+  await page.getByPlaceholder("帳號").fill(USERNAME);
+  await page.getByPlaceholder("密碼").fill(PASSWORD);
+  await page.getByRole("button", { name: "登入" }).click();
+  await expect(page).toHaveURL("/", { timeout: 8000 });
+}
+
+test.describe("YangChat E2E", () => {
+
+  // 1. 登入
+  test("登入成功後顯示主畫面", async ({ page }) => {
+    await login(page);
+    await expect(page.getByText("Yang").first()).toBeVisible();
+  });
+
+  test("登入失敗停在登入頁", async ({ page }) => {
+    await page.goto("/login");
+    await page.getByPlaceholder("帳號").fill("wrong");
+    await page.getByPlaceholder("密碼").fill("wrong");
+    await page.getByRole("button", { name: "登入" }).click();
+    await expect(page).toHaveURL("/login", { timeout: 5000 });
+  });
+
+  // 2. 輸入框狀態
+  test("新對話後輸入框可用", async ({ page }) => {
+    await login(page);
+    await page.getByRole("button", { name: "新對話" }).click();
+    await expect(page.getByTestId("message-input")).toBeEnabled();
+  });
+
+  test("有文字後送出按鈕啟用", async ({ page }) => {
+    await login(page);
+    await page.getByRole("button", { name: "新對話" }).click();
+    await page.getByTestId("message-input").fill("hello");
+    await expect(page.getByTestId("send-button")).toBeEnabled();
+  });
+
+  test("無文字時送出按鈕停用", async ({ page }) => {
+    await login(page);
+    await page.getByRole("button", { name: "新對話" }).click();
+    await expect(page.getByTestId("send-button")).toBeDisabled();
+  });
+
+  // 3. 附件按鈕（合併後只剩一個迴紋針）
+  test("只有一個附件 label", async ({ page }) => {
+    await login(page);
+    await page.getByRole("button", { name: "新對話" }).click();
+    await expect(page.locator('label[for="file-upload"]')).toHaveCount(1);
+  });
+
+  test("點迴紋針觸發選擇器且 accept 含圖片與文件", async ({ page }) => {
+    await login(page);
+    await page.getByRole("button", { name: "新對話" }).click();
+    const [fileChooser] = await Promise.all([
+      page.waitForEvent("filechooser", { timeout: 5000 }),
+      page.locator('label[for="file-upload"]').click(),
+    ]);
+    expect(fileChooser).toBeTruthy();
+    const accept = await fileChooser.element().getAttribute("accept") ?? "";
+    expect(accept).toContain("image/jpeg");
+    expect(accept).toContain(".pdf");
+  });
+
+  // 4. 文件上傳（txt → uploadFile 路線）
+  test("上傳 TXT 文件後顯示附件標籤", async ({ page }) => {
+    await login(page);
+    await page.getByRole("button", { name: "新對話" }).click();
+
+    const tmpFile = path.join(os.tmpdir(), "yangchat-test.txt");
+    fs.writeFileSync(tmpFile, "這是測試文件，驗證上傳功能正常。");
+
+    const [fileChooser] = await Promise.all([
+      page.waitForEvent("filechooser", { timeout: 5000 }),
+      page.locator('label[for="file-upload"]').click(),
+    ]);
+    await fileChooser.setFiles(tmpFile);
+
+    // 等附件標籤（正在解析 or 顯示字元數）
+    await expect(
+      page.locator("text=正在解析文件").or(page.locator("text=字元"))
+    ).toBeVisible({ timeout: 15000 });
+
+    fs.unlinkSync(tmpFile);
+  });
+
+  // 5. 搜尋功能
+  test("搜尋按鈕可切換搜尋框", async ({ page }) => {
+    await login(page);
+    await page.getByTestId("search-toggle").click();
+    await expect(page.getByTestId("search-input")).toBeVisible();
+  });
+
+  test("搜尋不存在關鍵字顯示無結果", async ({ page }) => {
+    await login(page);
+    await page.getByTestId("search-toggle").click();
+    await page.getByTestId("search-input").fill("xyzzy_不存在_99999");
+    await expect(
+      page.locator("text=無符合結果").or(page.locator("text=輸入關鍵字"))
+    ).toBeVisible({ timeout: 8000 });
+  });
+
+  // 6. 登出
+  test("登出後回到登入頁", async ({ page }) => {
+    await login(page);
+    const logoutBtn = page.locator("button[title=\'登出\']").or(
+      page.getByRole("button", { name: "登出" })
+    );
+    await expect(logoutBtn).toBeVisible();
+    await logoutBtn.click();
+    await expect(page).toHaveURL("/login", { timeout: 5000 });
+  });
+});

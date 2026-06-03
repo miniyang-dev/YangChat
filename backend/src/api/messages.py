@@ -21,6 +21,21 @@ def _build_history(messages: list) -> list:
     return result
 
 
+def _build_user_content_with_file(content: str, images: list | None, file_context: str | None) -> str | list:
+    """
+    如果有 file_context，把文件內容作為前綴注入 user 訊息。
+    讓 AI 知道使用者附加了什麼文件，再回答問題。
+    """
+    if file_context:
+        enriched = (
+            f"[附加文件內容]\n{file_context}\n\n[使用者訊息]\n{content}"
+            if content
+            else f"[附加文件內容]\n{file_context}"
+        )
+        return ai_service.build_content(enriched, images)
+    return ai_service.build_content(content, images)
+
+
 @router.post("/send", response_model=SendMessageResponse)
 async def send_message(
     body: SendMessageRequest,
@@ -34,14 +49,17 @@ async def send_message(
 
     model = body.model or conv["model"] or settings.DEFAULT_MODEL
 
-    # 儲存 user 訊息
+    # 儲存 user 訊息（DB 只存原始內容，file_context 不存）
     user_msg = await db_service.save_message(
         db, body.conversation_id, "user", body.content, body.images
     )
 
-    # 組建歷史
+    # 組建歷史 + 附加文件 context
     history = _build_history(conv["messages"])
-    history.append({"role": "user", "content": ai_service.build_content(body.content, body.images)})
+    history.append({
+        "role": "user",
+        "content": _build_user_content_with_file(body.content, body.images, body.file_context),
+    })
 
     # 呼叫 AI — W2: 錯誤不洩漏內部細節
     try:
@@ -76,13 +94,17 @@ async def stream_message(
 
     model = body.model or conv["model"] or settings.DEFAULT_MODEL
 
-    # 儲存 user 訊息
+    # 儲存 user 訊息（DB 只存原始內容，file_context 不存進 DB 以免污染歷史）
     user_msg = await db_service.save_message(
         db, body.conversation_id, "user", body.content, body.images
     )
 
+    # 組建歷史 + 附加文件 context（僅這次呼叫注入，不存 DB）
     history = _build_history(conv["messages"])
-    history.append({"role": "user", "content": ai_service.build_content(body.content, body.images)})
+    history.append({
+        "role": "user",
+        "content": _build_user_content_with_file(body.content, body.images, body.file_context),
+    })
 
     # 用 list 收集完整回覆（可在 generator 外被 background task 讀取）
     collected: list[str] = []

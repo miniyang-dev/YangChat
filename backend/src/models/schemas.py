@@ -50,6 +50,7 @@ class SendMessageRequest(BaseModel):
     content: str = Field(default="", max_length=32_000)  # W3: 長度上限
     images: Optional[List[str]] = None  # base64 data URLs
     model: Optional[str] = None         # override 模型
+    file_context: Optional[str] = Field(default=None, max_length=20_000)  # 解析後的文件文字
 
     # W1: 圖片大小與數量驗證
     @field_validator("images")

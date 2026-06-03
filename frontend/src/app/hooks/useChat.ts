@@ -21,7 +21,8 @@ export function useChat() {
       content: string,
       images: string[] | undefined,
       model: string | undefined,
-      onNewConv?: (msg: Message) => void
+      onNewConv?: (msg: Message) => void,
+      fileContext?: string,
     ) => {
       abortRef.current?.abort();
       setStreaming(true);
@@ -61,6 +62,7 @@ export function useChat() {
           setStreamingText("");   // 清掉之前的文字（搜尋前沒有文字）
           accum = "";
         },
+        fileContext,
       );
     },
     []

@@ -6,8 +6,9 @@ import { InputBar } from "../components/InputBar";
 import { ModelSelector } from "../components/ModelSelector";
 import { useConversations } from "../hooks/useConversations";
 import { useChat } from "../hooks/useChat";
-import { createConversation, getConversation, listModels } from "../services/api";
+import { createConversation, getConversation, listModels, exportPptx } from "../services/api";
 import type { ModelInfo } from "../types";
+import { Download } from "lucide-react";
 
 export function Chat() {
   const navigate = useNavigate();
@@ -17,6 +18,8 @@ export function Chat() {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [selectedModel, setSelectedModel] = useState("claude-sonnet-4-6");
   const [modelsError, setModelsError] = useState(false);
+  const [exportingPptx, setExportingPptx] = useState(false);
+  const [pptxError, setPptxError] = useState<string>("");
 
   // F-C3: 用 ref 追蹤「目前應顯示哪個對話」，防止 race condition
   const activeIdRef = useRef<string | null>(null);
@@ -77,7 +80,7 @@ export function Chat() {
 
   // 送出訊息
   const handleSend = useCallback(
-    async (content: string, images: string[]) => {
+    async (content: string, images: string[], fileContext?: string) => {
       if (streaming) return;
 
       let convId = activeId;
@@ -112,7 +115,8 @@ export function Chat() {
               )
               .sort((a, b) => (a.updated_at > b.updated_at ? -1 : 1))
           );
-        }
+        },
+        fileContext,
       );
     },
     [streaming, activeId, selectedModel, sendStream, setConversations]
@@ -123,6 +127,33 @@ export function Chat() {
     localStorage.removeItem("token");
     navigate("/login", { replace: true });
   };
+
+  const handleExportPptx = useCallback(async () => {
+    if (messages.length === 0 || exportingPptx) return;
+    setPptxError("");
+    setExportingPptx(true);
+
+    // 把目前對話摘要成一句 prompt
+    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+    const prompt = lastAssistant
+      ? `根據以下對話內容產出投影片：${lastAssistant.content.slice(0, 500)}`
+      : "根據對話產出投影片";
+
+    try {
+      const blob = await exportPptx(prompt, 5);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "yangchat-export.pptx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      setPptxError((err as Error).message || "匯出失敗");
+      setTimeout(() => setPptxError(""), 4000);
+    } finally {
+      setExportingPptx(false);
+    }
+  }, [messages, exportingPptx]);
 
   return (
     <div className="flex h-screen" style={{ backgroundColor: "#08090a", color: "#f0f1f3" }}>
@@ -154,19 +185,47 @@ export function Chat() {
               />
             )}
           </div>
-          <button
-            onClick={handleLogout}
-            className="text-[13px] transition-colors duration-150"
-            style={{ color: "#62666d" }}
-            onMouseEnter={(e) =>
-              ((e.currentTarget as HTMLButtonElement).style.color = "#9499a5")
-            }
-            onMouseLeave={(e) =>
-              ((e.currentTarget as HTMLButtonElement).style.color = "#62666d")
-            }
-          >
-            登出
-          </button>
+          <div className="flex items-center gap-3">
+            {pptxError && (
+              <span className="text-red-400 text-xs">{pptxError}</span>
+            )}
+            {/* PPTX 匯出按鈕 */}
+            {messages.length > 0 && (
+              <button
+                onClick={handleExportPptx}
+                disabled={exportingPptx || streaming}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ color: "#9499a5", border: "1px solid rgba(255,255,255,0.1)" }}
+                onMouseEnter={(e) => {
+                  if (!exportingPptx && !streaming) {
+                    (e.currentTarget as HTMLButtonElement).style.color = "#f0f1f3";
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.2)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.color = "#9499a5";
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.1)";
+                }}
+                title="將對話匯出為 PowerPoint"
+              >
+                <Download size={13} />
+                {exportingPptx ? "產生中..." : "匯出 PPTX"}
+              </button>
+            )}
+            <button
+              onClick={handleLogout}
+              className="text-[13px] transition-colors duration-150"
+              style={{ color: "#62666d" }}
+              onMouseEnter={(e) =>
+                ((e.currentTarget as HTMLButtonElement).style.color = "#9499a5")
+              }
+              onMouseLeave={(e) =>
+                ((e.currentTarget as HTMLButtonElement).style.color = "#62666d")
+              }
+            >
+              登出
+            </button>
+          </div>
         </div>
 
         {/* 訊息區 */}

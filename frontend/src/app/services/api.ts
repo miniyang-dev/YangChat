@@ -96,6 +96,7 @@ export function streamMessage(
   onDone: () => void,
   onError: (err: string) => void,
   onToolUse?: (tools: string[]) => void,
+  fileContext?: string,          // 新增：文件解析後的純文字
 ): AbortController {
   const controller = new AbortController();
 
@@ -104,7 +105,7 @@ export function streamMessage(
       const res = await fetch(`${BASE_URL}/messages/stream`, {
         method: "POST",
         headers: headers(),
-        body: JSON.stringify({ conversation_id: conversationId, content, images, model }),
+        body: JSON.stringify({ conversation_id: conversationId, content, images, model, file_context: fileContext }),
         signal: controller.signal,
       });
 
@@ -168,4 +169,43 @@ export async function listModels(): Promise<ModelInfo[]> {
     headers: headers(),
   });
   return res.data;
+}
+
+// --- File Upload ---
+export interface UploadResult {
+  filename: string;
+  char_count: number;
+  preview: string;
+  full_text: string;
+}
+
+export async function uploadFile(file: File): Promise<UploadResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE_URL}/upload`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${getToken()}` },
+    // 不設 Content-Type，讓瀏覽器自動加上 multipart boundary
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// --- PPTX Export ---
+export async function exportPptx(prompt: string, slideCount: number = 5): Promise<Blob> {
+  const res = await fetch(`${BASE_URL}/export/pptx`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({ prompt, slide_count: slideCount }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.blob();
 }

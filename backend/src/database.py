@@ -50,5 +50,40 @@ async def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_messages_conv
                 ON messages(conversation_id);
+
+            -- FTS5 全文搜尋虛擬表（content= 外部內容模式，不重複儲存資料）
+            CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts
+                USING fts5(
+                    content,
+                    conversation_id UNINDEXED,
+                    role UNINDEXED,
+                    created_at UNINDEXED,
+                    content='messages',
+                    content_rowid='rowid',
+                    tokenize='unicode61'
+                );
+
+            -- INSERT trigger：新訊息自動同步到 FTS
+            CREATE TRIGGER IF NOT EXISTS messages_ai
+                AFTER INSERT ON messages BEGIN
+                    INSERT INTO messages_fts(rowid, content, conversation_id, role, created_at)
+                    VALUES (new.rowid, new.content, new.conversation_id, new.role, new.created_at);
+                END;
+
+            -- DELETE trigger：刪除訊息時同步 FTS
+            CREATE TRIGGER IF NOT EXISTS messages_ad
+                AFTER DELETE ON messages BEGIN
+                    INSERT INTO messages_fts(messages_fts, rowid, content, conversation_id, role, created_at)
+                    VALUES ('delete', old.rowid, old.content, old.conversation_id, old.role, old.created_at);
+                END;
+
+            -- UPDATE trigger：更新訊息時同步 FTS
+            CREATE TRIGGER IF NOT EXISTS messages_au
+                AFTER UPDATE ON messages BEGIN
+                    INSERT INTO messages_fts(messages_fts, rowid, content, conversation_id, role, created_at)
+                    VALUES ('delete', old.rowid, old.content, old.conversation_id, old.role, old.created_at);
+                    INSERT INTO messages_fts(rowid, content, conversation_id, role, created_at)
+                    VALUES (new.rowid, new.content, new.conversation_id, new.role, new.created_at);
+                END;
         """)
         await db.commit()

@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from src.database import init_db
-from src.api import auth, conversations, messages, models, upload, export
+from src.api import auth, conversations, messages, models, upload, export, search
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,7 @@ app.include_router(messages.router,      prefix="/api/messages")
 app.include_router(models.router,        prefix="/api/models")
 app.include_router(upload.router,        prefix="/api")
 app.include_router(export.router,        prefix="/api")
+app.include_router(search.router,        prefix="/api")
 
 
 @app.get("/health")

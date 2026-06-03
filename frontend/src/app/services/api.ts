@@ -220,6 +220,31 @@ export async function uploadImage(file: File): Promise<ImageUploadResult> {
   return res.json();
 }
 
+// --- Search ---
+export interface SearchResult {
+  message_id: string;
+  conversation_id: string;
+  conversation_title: string;
+  role: "user" | "assistant";
+  snippet: string;   // 含 **keyword** 高亮標記
+  created_at: string;
+}
+
+export interface SearchParams {
+  q: string;
+  scope?: "all" | "user" | "assistant";
+  date?: "all" | "today" | "week" | "month";
+  limit?: number;
+}
+
+export async function searchMessages(params: SearchParams): Promise<SearchResult[]> {
+  const qs = new URLSearchParams({ q: params.q });
+  if (params.scope && params.scope !== "all") qs.set("scope", params.scope);
+  if (params.date  && params.date  !== "all") qs.set("date",  params.date);
+  if (params.limit) qs.set("limit", String(params.limit));
+  return req<SearchResult[]>(`/search?${qs}`, { headers: headers() });
+}
+
 // --- PPTX Export ---
 export async function exportPptx(prompt: string, slideCount: number = 5): Promise<Blob> {
   const res = await fetch(`${BASE_URL}/export/pptx`, {

@@ -1,49 +1,51 @@
 import { useRef, useState, type KeyboardEvent } from "react";
-import { Paperclip, FileText, Send, X } from "lucide-react";
-import type { ModelInfo } from "../types";
-import { uploadFile, type UploadResult } from "../services/api";
+import { Paperclip, FileText, Send, X, ImageIcon } from "lucide-react";
+import { uploadFile, uploadImage, type UploadResult, type ImageUploadResult } from "../services/api";
 
 interface Props {
-  models: ModelInfo[];
-  selectedModel: string;
   disabled: boolean;
   onSend: (content: string, images: string[], fileContext?: string) => void;
 }
 
-// 圖片限制
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
-const MAX_IMAGE_COUNT = 4;
-const BLOCKED_MIME = ["image/svg+xml"];
-
 // 文件上傳限制
 const ACCEPTED_DOC_TYPES = ".pdf,.pptx,.docx,.txt,.md,.csv";
+// 圖片上傳（送 Gemini 分析）
+const ACCEPTED_IMAGE_TYPES = "image/jpeg,image/png,image/gif,image/webp";
 
-export function InputBar({ models, selectedModel, disabled, onSend }: Props) {
+export function InputBar({ disabled, onSend }: Props) {
   const [text, setText] = useState("");
-  const [images, setImages] = useState<string[]>([]);
   const [imgError, setImgError] = useState<string>("");
 
-  // 文件上傳狀態
+  // 文件上傳狀態（PDF/PPTX/DOCX/TXT/MD/CSV）
   const [uploadedFile, setUploadedFile] = useState<UploadResult | null>(null);
   const [uploading, setUploading] = useState(false);
   const [fileError, setFileError] = useState<string>("");
+
+  // 圖片上傳狀態（→ Gemini 描述 → file_context）
+  const [uploadedImage, setUploadedImage] = useState<ImageUploadResult | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageError, setImageError] = useState<string>("");
 
   const imgFileRef = useRef<HTMLInputElement>(null);
   const docFileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const selectedModelInfo = models.find((m) => m.id === selectedModel);
-  const visionEnabled = selectedModelInfo?.vision ?? false;
+  // 合併 file_context（文件優先；圖片描述次之；兩者都有時合併）
+  const fileContext = [
+    uploadedFile?.full_text,
+    uploadedImage?.full_text,
+  ].filter(Boolean).join("\n\n") || undefined;
 
   const handleSend = () => {
     const trimmed = text.trim();
-    if (!trimmed && images.length === 0 && !uploadedFile) return;
-    onSend(trimmed, images, uploadedFile?.full_text);
+    if (!trimmed && !uploadedFile && !uploadedImage) return;
+    onSend(trimmed, [], fileContext);
     setText("");
-    setImages([]);
     setImgError("");
     setUploadedFile(null);
     setFileError("");
+    setUploadedImage(null);
+    setImageError("");
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
@@ -63,45 +65,7 @@ export function InputBar({ models, selectedModel, disabled, onSend }: Props) {
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   };
 
-  // ── 圖片上傳 ───────────────────────────────────────────────────────────────
-  const handleImgFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setImgError("");
-    const files = Array.from(e.target.files || []);
-
-    if (images.length + files.length > MAX_IMAGE_COUNT) {
-      setImgError(`最多只能上傳 ${MAX_IMAGE_COUNT} 張圖片`);
-      e.target.value = "";
-      return;
-    }
-
-    files.forEach((file) => {
-      if (!file.type.startsWith("image/")) {
-        setImgError("只能上傳圖片格式");
-        return;
-      }
-      if (BLOCKED_MIME.includes(file.type)) {
-        setImgError("不支援 SVG 格式（安全限制）");
-        return;
-      }
-      if (file.size > MAX_IMAGE_SIZE) {
-        setImgError(`圖片「${file.name}」超過 5MB 限制`);
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        setImages((prev) => [...prev, reader.result as string]);
-      };
-      reader.readAsDataURL(file);
-    });
-    e.target.value = "";
-  };
-
-  const removeImage = (index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index));
-    setImgError("");
-  };
-
-  // ── 文件上傳 ───────────────────────────────────────────────────────────────
+  // ── 文件上傳（PDF/PPTX/DOCX 等）──────────────────────────────────────────
   const handleDocFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setFileError("");
     const file = e.target.files?.[0];
@@ -125,10 +89,42 @@ export function InputBar({ models, selectedModel, disabled, onSend }: Props) {
     setFileError("");
   };
 
+  // ── 圖片上傳（→ Gemini Flash 描述）────────────────────────────────────────
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setImageError("");
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    setUploadingImage(true);
+    setUploadedImage(null);
+    try {
+      const result = await uploadImage(file);
+      setUploadedImage(result);
+    } catch (err: unknown) {
+      setImageError((err as Error).message || "圖片分析失敗，請重試");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const removeImage = () => {
+    setUploadedImage(null);
+    setImageError("");
+  };
+
   const sendDisabled =
     disabled ||
     uploading ||
-    (!text.trim() && images.length === 0 && !uploadedFile);
+    uploadingImage ||
+    (!text.trim() && !uploadedFile && !uploadedImage);
+
+  // placeholder 動態提示
+  const placeholder = uploadedImage
+    ? `已分析圖片「${uploadedImage.filename}」，輸入問題...`
+    : uploadedFile
+    ? `已附加「${uploadedFile.filename}」，輸入問題或指令...`
+    : "發送訊息...";
 
   return (
     <div
@@ -142,33 +138,24 @@ export function InputBar({ models, selectedModel, disabled, onSend }: Props) {
         {/* 錯誤提示 */}
         {imgError && <p className="text-red-400 text-xs mb-2">{imgError}</p>}
         {fileError && <p className="text-red-400 text-xs mb-2">{fileError}</p>}
+        {imageError && <p className="text-red-400 text-xs mb-2">{imageError}</p>}
 
-        {/* 圖片預覽 */}
-        {images.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-3">
-            {images.map((img, i) => (
-              <div key={i} className="relative">
-                <img
-                  src={img}
-                  alt={`預覽 ${i + 1}`}
-                  className="h-16 w-16 object-cover rounded-lg"
-                  style={{ border: "1px solid rgba(255,255,255,0.1)" }}
-                />
-                <button
-                  onClick={() => removeImage(i)}
-                  className="absolute -top-1 -right-1 rounded-full p-0.5 transition-colors"
-                  style={{ backgroundColor: "#08090a", border: "1px solid rgba(255,255,255,0.1)" }}
-                  onMouseEnter={(e) =>
-                    ((e.currentTarget as HTMLButtonElement).style.backgroundColor = "#991b1b")
-                  }
-                  onMouseLeave={(e) =>
-                    ((e.currentTarget as HTMLButtonElement).style.backgroundColor = "#08090a")
-                  }
-                >
-                  <X size={12} style={{ color: "#9499a5" }} />
-                </button>
-              </div>
-            ))}
+        {/* 圖片分析預覽標籤 */}
+        {uploadedImage && (
+          <div
+            className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg"
+            style={{ backgroundColor: "#111219", border: "1px solid rgba(94,106,210,0.3)" }}
+          >
+            <ImageIcon size={14} style={{ color: "#5e6ad2", flexShrink: 0 }} />
+            <span className="text-xs flex-1 truncate" style={{ color: "#9499a5" }}>
+              {uploadedImage.filename}
+            </span>
+            <span className="text-xs" style={{ color: "#62666d" }}>
+              圖片已分析（{uploadedImage.description_length.toLocaleString()} 字）
+            </span>
+            <button onClick={removeImage}>
+              <X size={12} style={{ color: "#9499a5" }} />
+            </button>
           </div>
         )}
 
@@ -197,6 +184,11 @@ export function InputBar({ models, selectedModel, disabled, onSend }: Props) {
             正在解析文件...
           </p>
         )}
+        {uploadingImage && (
+          <p className="text-xs mb-2" style={{ color: "#5e6ad2" }}>
+            正在分析圖片（Gemini Flash）...
+          </p>
+        )}
 
         {/* Unified input box */}
         <form
@@ -221,35 +213,34 @@ export function InputBar({ models, selectedModel, disabled, onSend }: Props) {
                 "rgba(255,255,255,0.08)";
             }}
           >
-            {/* 圖片上傳按鈕（需要 vision 模型） */}
+            {/* 圖片上傳按鈕（→ Gemini 分析，永遠可用） */}
             <button
               type="button"
               onClick={() => imgFileRef.current?.click()}
-              disabled={!visionEnabled || disabled}
+              disabled={disabled || uploadingImage}
               className="p-2 rounded-lg transition-all duration-150 flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
-              style={{ color: "#62666d" }}
+              style={{ color: uploadedImage ? "#5e6ad2" : "#62666d" }}
               onMouseEnter={(e) => {
-                if (visionEnabled && !disabled) {
+                if (!disabled && !uploadingImage) {
                   (e.currentTarget as HTMLButtonElement).style.color = "#9499a5";
                   (e.currentTarget as HTMLButtonElement).style.backgroundColor =
                     "rgba(255,255,255,0.05)";
                 }
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.color = "#62666d";
+                (e.currentTarget as HTMLButtonElement).style.color = uploadedImage ? "#5e6ad2" : "#62666d";
                 (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
               }}
-              title={!visionEnabled ? "當前模型不支援圖片" : "上傳圖片"}
+              title="上傳圖片（Gemini Flash 分析）"
             >
               <Paperclip size={18} />
             </button>
             <input
               ref={imgFileRef}
               type="file"
-              accept="image/png,image/jpeg,image/gif,image/webp"
-              multiple
+              accept={ACCEPTED_IMAGE_TYPES}
               className="hidden"
-              onChange={handleImgFileChange}
+              onChange={handleImageFileChange}
             />
 
             {/* 文件上傳按鈕（PDF/DOCX/等） */}
@@ -291,7 +282,7 @@ export function InputBar({ models, selectedModel, disabled, onSend }: Props) {
               onInput={handleTextChange as unknown as React.FormEventHandler<HTMLTextAreaElement>}
               onKeyDown={handleKey}
               disabled={disabled}
-              placeholder={uploadedFile ? `已附加「${uploadedFile.filename}」，輸入問題或指令...` : "發送訊息..."}
+              placeholder={placeholder}
               rows={1}
               className="flex-1 bg-transparent text-[14px] resize-none outline-none leading-relaxed disabled:opacity-50 overflow-y-auto"
               style={{

@@ -7,14 +7,14 @@ interface Props {
   onSend: (content: string, images: string[], fileContext?: string) => void;
 }
 
-// 文件上傳限制
-const ACCEPTED_DOC_TYPES = ".pdf,.pptx,.docx,.txt,.md,.csv";
-// 圖片上傳（送 Gemini 分析）
-const ACCEPTED_IMAGE_TYPES = "image/jpeg,image/png,image/gif,image/webp";
+// 合併 accept：圖片 + 文件
+const ACCEPTED_ALL = "image/jpeg,image/png,image/gif,image/webp,.pdf,.pptx,.docx,.txt,.md,.csv";
+
+const ALLOWED_IMG_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const ALLOWED_DOC_EXT = [".pdf", ".pptx", ".docx", ".txt", ".md", ".csv"];
 
 export function InputBar({ disabled, onSend }: Props) {
   const [text, setText] = useState("");
-  const [imgError, setImgError] = useState<string>("");
 
   // 文件上傳狀態（PDF/PPTX/DOCX/TXT/MD/CSV）
   const [uploadedFile, setUploadedFile] = useState<UploadResult | null>(null);
@@ -26,11 +26,10 @@ export function InputBar({ disabled, onSend }: Props) {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageError, setImageError] = useState<string>("");
 
-  const imgFileRef = useRef<HTMLInputElement>(null);
-  const docFileRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // 合併 file_context（文件優先；圖片描述次之；兩者都有時合併）
+  // 合併 file_context（文件優先；圖片描述次之）
   const fileContext = [
     uploadedFile?.full_text,
     uploadedImage?.full_text,
@@ -41,7 +40,6 @@ export function InputBar({ disabled, onSend }: Props) {
     if (!trimmed && !uploadedFile && !uploadedImage) return;
     onSend(trimmed, [], fileContext);
     setText("");
-    setImgError("");
     setUploadedFile(null);
     setFileError("");
     setUploadedImage(null);
@@ -65,88 +63,65 @@ export function InputBar({ disabled, onSend }: Props) {
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   };
 
-  // ── 文件上傳（PDF/PPTX/DOCX 等）──────────────────────────────────────────
-  const handleDocFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ── 統一上傳入口：依 MIME type / 副檔名自動分流 ──────────────────────────
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setFileError("");
+    setImageError("");
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
 
-    // FC-3: client-side 大小驗證，不等到 server 才拒絕
-    const MAX_DOC_SIZE = 10 * 1024 * 1024; // 10MB
-    if (file.size > MAX_DOC_SIZE) {
-      setFileError("檔案大小不可超過 10MB");
-      return;
-    }
-
-    // 副檔名白名單驗證（accept 屬性可被繞過）
-    const ALLOWED_DOC_EXT = [".pdf", ".pptx", ".docx", ".txt", ".md", ".csv"];
+    const isImage = ALLOWED_IMG_TYPES.includes(file.type);
     const ext = "." + (file.name.split(".").pop()?.toLowerCase() ?? "");
-    if (!ALLOWED_DOC_EXT.includes(ext)) {
-      setFileError("不支援的檔案格式，請上傳 PDF、Word、PPTX、TXT、Markdown 或 CSV");
-      return;
-    }
+    const isDoc = ALLOWED_DOC_EXT.includes(ext);
 
-    setUploading(true);
-    setUploadedFile(null);
-    try {
-      const result = await uploadFile(file);
-      setUploadedFile(result);
-    } catch (err: unknown) {
-      setFileError((err as Error).message || "上傳失敗，請重試");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const removeFile = () => {
-    setUploadedFile(null);
-    setFileError("");
-  };
-
-  // ── 圖片上傳（→ Gemini Flash 描述）────────────────────────────────────────
-  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    setImageError("");
-    setImgError(""); // FW-7: imgError 現在用於圖片大小/格式錯誤（原先是 dead code）
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = "";
-
-    // FC-3: client-side 大小驗證
-    const MAX_IMG_SIZE = 5 * 1024 * 1024; // 5MB
-    if (file.size > MAX_IMG_SIZE) {
-      setImgError("圖片大小不可超過 5MB");
-      return;
-    }
-
-    // MIME type 驗證
-    const ALLOWED_IMG_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-    if (!ALLOWED_IMG_TYPES.includes(file.type)) {
-      setImgError("不支援的圖片格式，請上傳 JPEG、PNG、GIF 或 WebP");
-      return;
-    }
-
-    setUploadingImage(true);
-    setUploadedImage(null);
-    try {
-      const result = await uploadImage(file);
-      setUploadedImage(result);
-    } catch (err: unknown) {
-      setImageError((err as Error).message || "圖片分析失敗，請重試");
-    } finally {
-      setUploadingImage(false);
+    if (isImage) {
+      // ── 圖片路徑 ──────────────────────────────────────────────────────────
+      const MAX_IMG_SIZE = 5 * 1024 * 1024; // 5MB
+      if (file.size > MAX_IMG_SIZE) {
+        setImageError("圖片大小不可超過 5MB");
+        return;
+      }
+      setUploadingImage(true);
+      setUploadedImage(null);
+      try {
+        const result = await uploadImage(file);
+        setUploadedImage(result);
+      } catch (err: unknown) {
+        setImageError((err as Error).message || "圖片分析失敗，請重試");
+      } finally {
+        setUploadingImage(false);
+      }
+    } else if (isDoc) {
+      // ── 文件路徑 ──────────────────────────────────────────────────────────
+      const MAX_DOC_SIZE = 10 * 1024 * 1024; // 10MB
+      if (file.size > MAX_DOC_SIZE) {
+        setFileError("檔案大小不可超過 10MB");
+        return;
+      }
+      setUploading(true);
+      setUploadedFile(null);
+      try {
+        const result = await uploadFile(file);
+        setUploadedFile(result);
+      } catch (err: unknown) {
+        setFileError((err as Error).message || "上傳失敗，請重試");
+      } finally {
+        setUploading(false);
+      }
+    } else {
+      setFileError("不支援的格式，請上傳圖片（JPEG/PNG/GIF/WebP）或文件（PDF/Word/PPTX/TXT/MD/CSV）");
     }
   };
 
-  const removeImage = () => {
-    setUploadedImage(null);
-    setImageError("");
-  };
+  const removeFile = () => { setUploadedFile(null); setFileError(""); };
+  const removeImage = () => { setUploadedImage(null); setImageError(""); };
+
+  const isUploading = uploading || uploadingImage;
 
   const sendDisabled =
     disabled ||
-    uploading ||
-    uploadingImage ||
+    isUploading ||
     (!text.trim() && !uploadedFile && !uploadedImage);
 
   // placeholder 動態提示
@@ -166,7 +141,6 @@ export function InputBar({ disabled, onSend }: Props) {
     >
       <div className="max-w-3xl mx-auto">
         {/* 錯誤提示 */}
-        {imgError && <p className="text-red-400 text-xs mb-2">{imgError}</p>}
         {fileError && <p className="text-red-400 text-xs mb-2">{fileError}</p>}
         {imageError && <p className="text-red-400 text-xs mb-2">{imageError}</p>}
 
@@ -243,68 +217,37 @@ export function InputBar({ disabled, onSend }: Props) {
                 "rgba(255,255,255,0.08)";
             }}
           >
-            {/* 圖片上傳按鈕（→ Gemini 分析，永遠可用） */}
+            {/* 單一附件按鈕：自動判斷圖片 or 文件 */}
             <label
-              htmlFor="img-upload"
+              htmlFor="file-upload"
               className="p-2 rounded-lg transition-all duration-150 flex-shrink-0 cursor-pointer"
               style={{
-                color: uploadedImage ? "#5e6ad2" : "#62666d",
-                opacity: (disabled || uploadingImage) ? 0.3 : 1,
-                pointerEvents: (disabled || uploadingImage) ? "none" : "auto",
+                color: (uploadedImage || uploadedFile) ? "#5e6ad2" : "#62666d",
+                opacity: (disabled || isUploading) ? 0.3 : 1,
+                pointerEvents: (disabled || isUploading) ? "none" : "auto",
               }}
               onMouseEnter={(e) => {
-                if (!disabled && !uploadingImage) {
+                if (!disabled && !isUploading) {
                   (e.currentTarget as HTMLLabelElement).style.color = "#9499a5";
                   (e.currentTarget as HTMLLabelElement).style.backgroundColor = "rgba(255,255,255,0.05)";
                 }
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget as HTMLLabelElement).style.color = uploadedImage ? "#5e6ad2" : "#62666d";
+                (e.currentTarget as HTMLLabelElement).style.color =
+                  (uploadedImage || uploadedFile) ? "#5e6ad2" : "#62666d";
                 (e.currentTarget as HTMLLabelElement).style.backgroundColor = "transparent";
               }}
-              title="上傳圖片（Gemini Flash 分析）"
+              title="上傳圖片或文件（自動判斷）"
             >
               <Paperclip size={18} />
             </label>
             <input
-              id="img-upload"
-              ref={imgFileRef}
+              id="file-upload"
+              ref={fileRef}
               type="file"
-              accept={ACCEPTED_IMAGE_TYPES}
+              accept={ACCEPTED_ALL}
               className="hidden"
-              onChange={handleImageFileChange}
-            />
-
-            {/* 文件上傳按鈕（PDF/DOCX/等） */}
-            <label
-              htmlFor="doc-upload"
-              className="p-2 rounded-lg transition-all duration-150 flex-shrink-0 cursor-pointer"
-              style={{
-                color: uploadedFile ? "#5e6ad2" : "#62666d",
-                opacity: (disabled || uploading) ? 0.3 : 1,
-                pointerEvents: (disabled || uploading) ? "none" : "auto",
-              }}
-              onMouseEnter={(e) => {
-                if (!disabled && !uploading) {
-                  (e.currentTarget as HTMLLabelElement).style.color = "#9499a5";
-                  (e.currentTarget as HTMLLabelElement).style.backgroundColor = "rgba(255,255,255,0.05)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLLabelElement).style.color = uploadedFile ? "#5e6ad2" : "#62666d";
-                (e.currentTarget as HTMLLabelElement).style.backgroundColor = "transparent";
-              }}
-              title="上傳文件（PDF、Word、PPTX、TXT、Markdown、CSV）"
-            >
-              <FileText size={18} />
-            </label>
-            <input
-              id="doc-upload"
-              ref={docFileRef}
-              type="file"
-              accept={ACCEPTED_DOC_TYPES}
-              className="hidden"
-              onChange={handleDocFileChange}
+              onChange={handleFileChange}
             />
 
             {/* 文字輸入 */}

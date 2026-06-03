@@ -238,8 +238,6 @@ export function Chat() {
 
         {/* 輸入框 */}
         <InputBar
-          models={models}
-          selectedModel={selectedModel}
           disabled={streaming}
           onSend={handleSend}
         />

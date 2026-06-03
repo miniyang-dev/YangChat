@@ -186,7 +186,31 @@ export async function uploadFile(file: File): Promise<UploadResult> {
   const res = await fetch(`${BASE_URL}/upload`, {
     method: "POST",
     headers: { Authorization: `Bearer ${getToken()}` },
-    // 不設 Content-Type，讓瀏覽器自動加上 multipart boundary
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// --- Image Upload（Gemini Vision → 文字描述）---
+export interface ImageUploadResult {
+  filename: string;
+  content_type: string;
+  description_length: number;
+  preview: string;
+  full_text: string;  // "[圖片內容描述]\n..." 格式，直接當 file_context 用
+}
+
+export async function uploadImage(file: File): Promise<ImageUploadResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE_URL}/upload-image`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${getToken()}` },
     body: formData,
   });
   if (!res.ok) {

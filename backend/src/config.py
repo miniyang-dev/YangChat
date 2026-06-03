@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # Tavily Search
     TAVILY_API_KEY: str = ""
 
+    # Gemini Vision（圖片描述，再傳給 Pioneer AI）
+    GEMINI_API_KEY: str = ""
+
     # App
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost"]
 

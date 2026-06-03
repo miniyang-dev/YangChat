@@ -1,12 +1,15 @@
 """
-file_service.py — 解析上傳檔案為純文字
+file_service.py — 解析上傳檔案為純文字，並提供圖片 vision 描述（透過 Gemini Flash）
 支援格式：PDF (.pdf), PowerPoint (.pptx), Word (.docx), 純文字 (.txt), Markdown (.md), CSV (.csv)
+圖片格式：JPEG (.jpg/.jpeg), PNG (.png), GIF (.gif), WebP (.webp)
 """
+import base64
 import csv
 import io
 from pathlib import Path
 
 import fitz  # pymupdf
+import httpx
 from docx import Document
 from pptx import Presentation
 
@@ -123,3 +126,74 @@ def _extract_csv(content: bytes) -> str:
             lines.append(f"[第{i}筆] " + "，".join(row))
 
     return "\n".join(lines)
+
+
+# ── Image Vision（Gemini Flash）─────────────────────────────────────────────
+
+SUPPORTED_IMAGE_TYPES = {
+    "image/jpeg": "jpeg",
+    "image/png":  "png",
+    "image/gif":  "gif",
+    "image/webp": "webp",
+}
+
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+async def describe_image(image_bytes: bytes, content_type: str, api_key: str) -> str:
+    """
+    把圖片送給 Gemini Flash，回傳圖片的詳細文字描述。
+    描述結果會當成 file_context 注入給 Pioneer AI。
+    """
+    if content_type not in SUPPORTED_IMAGE_TYPES:
+        raise ValueError(f"不支援的圖片格式：{content_type}，支援 JPEG / PNG / GIF / WebP")
+
+    if len(image_bytes) > MAX_IMAGE_SIZE:
+        raise ValueError("圖片大小超過 10MB 限制")
+
+    # Base64 編碼
+    b64 = base64.b64encode(image_bytes).decode("utf-8")
+    mime = content_type  # e.g. "image/jpeg"
+
+    payload = {
+        "contents": [{
+            "parts": [
+                {
+                    "inline_data": {
+                        "mime_type": mime,
+                        "data": b64,
+                    }
+                },
+                {
+                    "text": (
+                        "請詳細描述這張圖片的所有內容，包括：\n"
+                        "1. 圖片中的主要元素、物件、人物\n"
+                        "2. 文字內容（如有，請完整抄錄）\n"
+                        "3. 圖表、數據或結構性資訊（如有）\n"
+                        "4. 整體場景與背景\n"
+                        "5. 任何可能有助於分析或回答問題的細節\n"
+                        "請用繁體中文回答，盡量完整詳細。"
+                    )
+                }
+            ]
+        }],
+        "generationConfig": {
+            "maxOutputTokens": 2048,
+            "temperature": 0.1,
+        }
+    }
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(url, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+
+    # 取出描述文字
+    try:
+        description = data["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError) as e:
+        raise ValueError(f"Gemini 回應格式異常：{e}，原始回應：{str(data)[:200]}")
+
+    return description.strip()

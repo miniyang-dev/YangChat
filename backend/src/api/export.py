@@ -8,7 +8,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from src.api.deps import get_current_user
 from src.services.export_service import build_pptx
-from src.services.ai_service import AIService
+from src.services.ai_service import chat_complete
 
 router = APIRouter()
 
@@ -35,16 +35,14 @@ async def export_pptx(
     """
     根據使用者需求，讓 AI 產生投影片結構，組裝成 .pptx 回傳下載。
     """
-    ai = AIService()
     user_msg = f"請製作 {req.slide_count} 頁投影片，主題：{req.prompt}"
 
-    # 呼叫 AI 收集完整回應（非 streaming 輸出給前端，內部等待）
-    full_response = ""
-    async for chunk in ai.stream_response(
-        messages=[{"role": "user", "content": user_msg}],
-        system_prompt=SYSTEM_PROMPT,
-    ):
-        full_response += chunk
+    # 呼叫 AI 收集完整回應（非 streaming，內部等待）
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_msg},
+    ]
+    full_response = await chat_complete(messages, model="claude-sonnet-4-6")
 
     # 清理可能的 markdown code block 包裝，再解析 JSON
     clean = full_response.strip()

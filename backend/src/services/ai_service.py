@@ -27,6 +27,31 @@ AVAILABLE_MODELS = [
 # S1: module-level singleton，複用 httpx 連線池
 _client: Optional[AsyncOpenAI] = None
 
+# ── Default System Prompt ─────────────────────────────────────────────────────
+
+DEFAULT_SYSTEM_PROMPT = """你是一位頂尖的 AI 助手，具備廣博的知識與嚴謹的分析能力。
+
+回答規範：
+- **完整性**：充分回答使用者的問題，不要省略重要細節，不要用「詳細可另問」等語句截斷
+- **深度**：提供成因、底層邏輯、具體案例與可執行方案，而非只給表面答案
+- **結構**：善用 markdown 格式（標題、列表、程式碼區塊），讓回答清晰易讀
+- **準確性**：不確定的事情明確說不確定，不捏造資訊
+- **語言**：使用者用什麼語言提問就用什麼語言回答；預設繁體中文（台灣用語），專有名詞保留英文
+- **程式碼**：附語言標籤與關鍵註釋，範例要可直接執行
+
+禁止行為：
+- 不得用「我只是 AI」等語句迴避實質回答
+- 不得在回答中途說「如需更多請告訴我」後就停止
+- 不得無故縮減回答長度
+"""
+
+def _inject_default_system(messages: list) -> list:
+    """若 messages 中沒有 system role，自動在最前面注入 default system prompt。"""
+    has_system = any(m.get("role") == "system" for m in messages)
+    if has_system:
+        return messages
+    return [{"role": "system", "content": DEFAULT_SYSTEM_PROMPT}] + messages
+
 # ── Tool Definitions ─────────────────────────────────────────────────────────
 
 TOOLS = [
@@ -155,7 +180,7 @@ async def generate_title(first_message: str, model: str) -> str:
 async def chat_complete(messages: list, model: str) -> str:
     """非 streaming：支援 tool call loop，回傳完整回覆文字"""
     client = get_client()
-    msgs = list(messages)
+    msgs = _inject_default_system(list(messages))
 
     for _ in range(5):  # 最多 5 輪 tool call
         response = await client.chat.completions.create(
@@ -163,7 +188,7 @@ async def chat_complete(messages: list, model: str) -> str:
             messages=msgs,
             tools=TOOLS,  # type: ignore[arg-type]
             tool_choice="auto",
-            max_tokens=4096,
+            max_tokens=8192,
         )
         msg = response.choices[0].message
 
@@ -186,7 +211,7 @@ async def chat_complete(messages: list, model: str) -> str:
     response = await client.chat.completions.create(
         model=model,
         messages=msgs,
-        max_tokens=4096,
+        max_tokens=8192,
     )
     return response.choices[0].message.content or ""
 
@@ -206,7 +231,7 @@ async def chat_stream(
       4. 若純文字 → 直接 yield SSE chunks
     """
     client = get_client()
-    msgs = list(messages)
+    msgs = _inject_default_system(list(messages))
 
     for round_num in range(5):  # 最多 5 輪
         stream = await client.chat.completions.create(
@@ -215,7 +240,7 @@ async def chat_stream(
             tools=TOOLS,  # type: ignore[arg-type]
             tool_choice="auto",
             stream=True,
-            max_tokens=4096,
+            max_tokens=8192,
         )
 
         # 收集這一輪的 stream

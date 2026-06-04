@@ -317,10 +317,8 @@ function UsageBar({ usage }: { usage: BillingUsage }) {
   // 進度條顏色：正常藍紫 → 中段橘 → 高段紅
   const barColor = isHigh ? "#f87171" : isMid ? "#fb923c" : "#5e6ad2";
 
-  const fmt = (n: number) =>
-    n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M`
-    : n >= 1_000   ? `${(n / 1_000).toFixed(0)}K`
-    : String(n);
+  const fmtCredit = (n: number) =>
+    n >= 1000 ? `$${(n / 1000).toFixed(1)}K` : `$${n.toFixed(2)}`;
 
   return (
     <div
@@ -354,11 +352,11 @@ function UsageBar({ usage }: { usage: BillingUsage }) {
         />
       </div>
 
-      {/* 下排：剩餘 token */}
+      {/* 下排：剩餘 credits */}
       <p className="mt-1.5 text-[10px]" style={{ color: "#4b5563" }}>
         剩餘&nbsp;
-        <span style={{ color: "#62666d" }}>{fmt(usage.tokens_remaining)}</span>
-        &nbsp;/&nbsp;{fmt(usage.tokens_limit)} tokens
+        <span style={{ color: "#62666d" }}>{fmtCredit(usage.credits_remaining)}</span>
+        &nbsp;/&nbsp;{fmtCredit(usage.credits_limit)}
       </p>
     </div>
   );

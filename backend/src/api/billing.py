@@ -1,6 +1,15 @@
 """
-Billing proxy — 從 Pioneer AI /billing/billing-status 取得用量，
+Billing proxy — 從 Pioneer AI /billing/plan-info 取得 credit 用量，
 對前端暴露 GET /api/billing/usage（不洩漏 Pioneer API key）。
+
+Pioneer 實際 API 欄位（2026-06）：
+  /billing/plan-info:
+    payment_plan       str   e.g. "pro_legacy"
+    credit_limit       float e.g. 10000.0  (USD cents or $?)
+    total_usage        float e.g. 9438.22
+    remaining_credits  float e.g. 561.78
+
+前端顯示單位：credits（小數點後 2 位），進度條 = total_usage / credit_limit
 """
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,82 +19,78 @@ from src.config import settings
 
 router = APIRouter()
 
-PIONEER_BILLING_URL = "https://api.pioneer.ai/billing/billing-status"
 PIONEER_PLAN_URL = "https://api.pioneer.ai/billing/plan-info"
+
+# 方案 ID → 顯示名稱
+_PLAN_DISPLAY = {
+    "pro_legacy":  "Pro",
+    "pro":         "Pro",
+    "hobby":       "Hobby",
+    "team":        "Team",
+    "enterprise":  "Enterprise",
+}
 
 
 class UsageResponse(BaseModel):
-    # token 用量
-    tokens_used: int
-    tokens_limit: int
-    tokens_remaining: int
+    credits_used: float       # 已用額度
+    credits_limit: float      # 總額度上限
+    credits_remaining: float  # 剩餘
     usage_pct: float          # 0.0 ~ 1.0
-    # 方案資訊
-    plan_name: str
+    plan_name: str            # 顯示用方案名稱
     has_payment: bool
 
 
 @router.get("/billing/usage", response_model=UsageResponse)
 async def get_billing_usage(_: str = Depends(get_current_user)):
     """
-    Proxy Pioneer /billing/billing-status + /billing/plan-info，
-    合併回傳前端所需欄位。
+    Proxy Pioneer /billing/plan-info，回傳前端所需 credit 用量。
     """
     key = settings.PIONEER_API_KEY
     if not key:
         raise HTTPException(status_code=503, detail="PIONEER_API_KEY 未設定")
 
-    auth_headers = {"Authorization": f"Bearer {key}"}
-
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            status_res, plan_res = await _fetch_both(client, auth_headers)
+            r = await client.get(
+                PIONEER_PLAN_URL,
+                headers={"Authorization": f"Bearer {key}"},
+            )
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Pioneer API 請求逾時")
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"Pioneer API 錯誤: {e}")
 
-    # billing-status 欄位
-    total_used: int = status_res.get("total_token_usage", 0)
-    free_remaining: int = status_res.get("free_tier_remaining_tokens", 0)
-    has_payment: bool = bool(status_res.get("has_payment_method", False))
+    if r.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Pioneer plan-info 回傳 HTTP {r.status_code}",
+        )
 
-    # plan-info 欄位
-    plan_name: str = plan_res.get("plan_name") or plan_res.get("plan", "Hobby")
-    token_limit: int = (
-        plan_res.get("token_limit")
-        or plan_res.get("credits_limit")
-        or plan_res.get("monthly_token_limit")
-        or 0
-    )
+    data = r.json()
 
-    # fallback：若 plan-info 沒給 limit，用 billing-status 推算
-    if token_limit == 0 and free_remaining >= 0:
-        token_limit = total_used + free_remaining
+    credits_used: float      = float(data.get("total_usage", 0) or 0)
+    credits_limit: float     = float(data.get("credit_limit", 0) or 0)
+    credits_remaining: float = float(data.get("remaining_credits", 0) or 0)
+    payment_plan: str        = data.get("payment_plan", "") or ""
+    has_payment: bool        = bool(data.get("has_payment_method", True))
 
-    tokens_remaining = max(0, token_limit - total_used)
-    usage_pct = (total_used / token_limit) if token_limit > 0 else 0.0
+    # fallback：plan-info 不給 has_payment，用 credit_limit > 0 推斷
+    if credits_limit > 0:
+        has_payment = True
+
+    # 若 remaining 沒給，自己算
+    if credits_remaining == 0 and credits_limit > 0:
+        credits_remaining = max(0.0, credits_limit - credits_used)
+
+    usage_pct = (credits_used / credits_limit) if credits_limit > 0 else 0.0
+
+    plan_name = _PLAN_DISPLAY.get(payment_plan.lower(), payment_plan or "Hobby")
 
     return UsageResponse(
-        tokens_used=total_used,
-        tokens_limit=token_limit,
-        tokens_remaining=tokens_remaining,
+        credits_used=round(credits_used, 2),
+        credits_limit=round(credits_limit, 2),
+        credits_remaining=round(credits_remaining, 2),
         usage_pct=round(min(usage_pct, 1.0), 4),
         plan_name=plan_name,
         has_payment=has_payment,
     )
-
-
-async def _fetch_both(client: httpx.AsyncClient, headers: dict):
-    """並行呼叫兩個 Pioneer endpoint。"""
-    import asyncio
-    status_task = client.get(PIONEER_BILLING_URL, headers=headers)
-    plan_task = client.get(PIONEER_PLAN_URL, headers=headers)
-    status_r, plan_r = await asyncio.gather(status_task, plan_task)
-
-    if status_r.status_code != 200:
-        raise httpx.HTTPError(f"billing-status HTTP {status_r.status_code}")
-    if plan_r.status_code != 200:
-        raise httpx.HTTPError(f"plan-info HTTP {plan_r.status_code}")
-
-    return status_r.json(), plan_r.json()

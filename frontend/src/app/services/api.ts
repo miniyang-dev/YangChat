@@ -361,9 +361,9 @@ export async function exportPptx(prompt: string, slideCount: number = 5): Promis
 
 // --- Billing ---
 export interface BillingUsage {
-  tokens_used: number;
-  tokens_limit: number;
-  tokens_remaining: number;
+  credits_used: number;
+  credits_limit: number;
+  credits_remaining: number;
   usage_pct: number;   // 0.0 ~ 1.0
   plan_name: string;
   has_payment: boolean;

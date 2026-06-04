@@ -7,7 +7,8 @@ import { ModelSelector } from "../components/ModelSelector";
 import { SystemPromptPanel } from "../components/SystemPromptPanel";
 import { useConversations } from "../hooks/useConversations";
 import { useChat } from "../hooks/useChat";
-import { createConversation, getConversation, listModels, exportPptx, generateImage, updateSystemPrompt } from "../services/api";
+import { createConversation, getConversation, listModels, exportPptx, generateImage, updateSystemPrompt, getBillingUsage } from "../services/api";
+import type { BillingUsage } from "../services/api";
 import type { ModelInfo, Message } from "../types";
 import { Download, Settings2 } from "lucide-react";
 
@@ -22,6 +23,7 @@ export function Chat() {
   const [exportingPptx, setExportingPptx] = useState(false);
   const [pptxError, setPptxError] = useState<string>("");
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
+  const [billingUsage, setBillingUsage] = useState<BillingUsage | null>(null);
 
   // F-C3: 用 ref 追蹤「目前應顯示哪個對話」，防止 race condition
   const activeIdRef = useRef<string | null>(null);
@@ -38,6 +40,16 @@ export function Chat() {
         setModelsError(true);
       });
   }, [load]);
+
+  // Pioneer 用量：啟動時抓一次，之後每 5 分鐘 refresh
+  useEffect(() => {
+    const fetchUsage = () => {
+      getBillingUsage().then(setBillingUsage).catch(() => {/* 靜默失敗，不影響主功能 */});
+    };
+    fetchUsage();
+    const timer = setInterval(fetchUsage, 5 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // 新建對話後，背景等 AI 命名完成再更新 sidebar 標題
   const pollTitle = useCallback((convId: string) => {
@@ -256,6 +268,7 @@ export function Chat() {
         onDelete={handleDelete}
         onNew={handleNew}
         loadError={loadError}
+        usage={billingUsage}
       />
 
       <div className="flex-1 flex flex-col min-w-0">

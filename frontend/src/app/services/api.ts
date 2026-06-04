@@ -358,3 +358,24 @@ export async function exportPptx(prompt: string, slideCount: number = 5): Promis
   }
   return res.blob();
 }
+
+// --- Billing ---
+export interface BillingUsage {
+  tokens_used: number;
+  tokens_limit: number;
+  tokens_remaining: number;
+  usage_pct: number;   // 0.0 ~ 1.0
+  plan_name: string;
+  has_payment: boolean;
+}
+
+export async function getBillingUsage(): Promise<BillingUsage> {
+  // 不走 req()：Pioneer API 的 401/502 不能觸發全域 logout redirect
+  const res = await fetch(`${BASE_URL}/billing/usage`, {
+    headers: headers(),
+  });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  return res.json();
+}

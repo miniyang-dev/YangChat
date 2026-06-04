@@ -1,8 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Trash2, Plus, Search, X, Clock, User, Bot } from "lucide-react";
+import { Trash2, Plus, Search, X, Clock, User, Bot, Zap } from "lucide-react";
 import type { Conversation } from "../types";
 import { searchMessages } from "../services/api";
-import type { SearchResult } from "../services/api";
+import type { SearchResult, BillingUsage } from "../services/api";
 
 interface Props {
   conversations: Conversation[];
@@ -11,6 +11,7 @@ interface Props {
   onDelete: (id: string) => void;
   onNew: () => void;
   loadError?: string;
+  usage?: BillingUsage | null;
 }
 
 // snippet 中的 **keyword** 轉為 <mark> 高亮
@@ -34,7 +35,7 @@ function SnippetHighlight({ text }: { text: string }) {
   );
 }
 
-export function Sidebar({ conversations, activeId, onSelect, onDelete, onNew, loadError }: Props) {
+export function Sidebar({ conversations, activeId, onSelect, onDelete, onNew, loadError, usage }: Props) {
   const [searchMode, setSearchMode] = useState(false);
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"all" | "user" | "assistant">("all");
@@ -298,6 +299,67 @@ export function Sidebar({ conversations, activeId, onSelect, onDelete, onNew, lo
           </>
         )}
       </div>
+
+      {/* ── 底部用量 footer ── */}
+      {usage && (
+        <UsageBar usage={usage} />
+      )}
+    </div>
+  );
+}
+
+// ── UsageBar ────────────────────────────────────────────────────────────────
+function UsageBar({ usage }: { usage: BillingUsage }) {
+  const pct = Math.min(usage.usage_pct * 100, 100);
+  const isHigh = pct >= 80;
+  const isMid  = pct >= 50;
+
+  // 進度條顏色：正常藍紫 → 中段橘 → 高段紅
+  const barColor = isHigh ? "#f87171" : isMid ? "#fb923c" : "#5e6ad2";
+
+  const fmt = (n: number) =>
+    n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M`
+    : n >= 1_000   ? `${(n / 1_000).toFixed(0)}K`
+    : String(n);
+
+  return (
+    <div
+      style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}
+      className="px-4 py-3 flex-shrink-0"
+    >
+      {/* 上排：icon + 方案 + 百分比 */}
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-1.5">
+          <Zap size={11} style={{ color: barColor }} />
+          <span className="text-[11px] font-medium" style={{ color: "#9499a5" }}>
+            {usage.plan_name}
+          </span>
+        </div>
+        <span
+          className="text-[10px] tabular-nums"
+          style={{ color: isHigh ? "#f87171" : "#62666d" }}
+        >
+          {pct.toFixed(0)}%
+        </span>
+      </div>
+
+      {/* 進度條 */}
+      <div
+        className="w-full rounded-full overflow-hidden"
+        style={{ height: "3px", backgroundColor: "rgba(255,255,255,0.08)" }}
+      >
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{ width: `${pct}%`, backgroundColor: barColor }}
+        />
+      </div>
+
+      {/* 下排：剩餘 token */}
+      <p className="mt-1.5 text-[10px]" style={{ color: "#4b5563" }}>
+        剩餘&nbsp;
+        <span style={{ color: "#62666d" }}>{fmt(usage.tokens_remaining)}</span>
+        &nbsp;/&nbsp;{fmt(usage.tokens_limit)} tokens
+      </p>
     </div>
   );
 }

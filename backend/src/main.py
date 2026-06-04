@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from src.database import init_db
-from src.api import auth, conversations, messages, models, upload, export, search
+from src.api import auth, conversations, messages, models, upload, export, search, billing
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -38,6 +38,7 @@ app.include_router(models.router,        prefix="/api/models")
 app.include_router(upload.router,        prefix="/api")
 app.include_router(export.router,        prefix="/api")
 app.include_router(search.router,        prefix="/api")
+app.include_router(billing.router,       prefix="/api")
 
 # 產圖靜態路由：/api/images/<filename>（確保目錄存在再 mount）
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)

@@ -141,7 +141,37 @@ test.describe("YangChat E2E", () => {
     await expect(page.getByRole("button", { name: /產生圖片/ })).toBeDisabled();
   });
 
-  // 7. 登出
+  // 7. Two-pass search classifier
+  test("不需要搜尋的問題直接回答不顯示搜尋狀態", async ({ page }) => {
+    await login(page);
+    await page.getByRole("button", { name: "新對話" }).click();
+    await page.getByTestId("message-input").fill("1+1等於多少？");
+    await page.getByTestId("send-button").click();
+    // 等 streaming 結束：message-input 重新 enabled
+    await expect(page.getByTestId("message-input")).toBeEnabled({ timeout: 30000 });
+    // 不應出現搜尋狀態文字
+    await expect(page.getByText(/正在搜尋/)).not.toBeVisible();
+    // assistant 回答（prose div）應包含「2」
+    await expect(page.locator(".prose").last()).toContainText("2");
+  });
+
+  test("股價問題觸發搜尋並回傳含股票關鍵字的回答", async ({ page }) => {
+    await login(page);
+    await page.getByRole("button", { name: "新對話" }).click();
+    await page.getByTestId("message-input").fill("台積電今天股價多少？");
+    await page.getByTestId("send-button").click();
+    // 先等搜尋狀態出現（確認有觸發搜尋）
+    await expect(page.getByText(/正在搜尋/)).toBeVisible({ timeout: 15000 });
+    // 再等搜尋狀態消失（回答完成）
+    await expect(page.getByText(/正在搜尋/)).not.toBeVisible({ timeout: 60000 });
+    // streaming 完全結束，.prose 包含股票關鍵字
+    await expect(page.locator(".prose").last()).toContainText(
+      /台積電|TSMC|2330|股價/,
+      { timeout: 10000 }
+    );
+  });
+
+  // 8. 登出
   test("登出後回到登入頁", async ({ page }) => {
     await login(page);
     const logoutBtn = page.locator("button[title=\'登出\']").or(

@@ -1,6 +1,8 @@
 import logging
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from src.database import init_db
 from src.api import auth, conversations, messages, models, upload, export, search
@@ -8,10 +10,13 @@ from src.config import settings
 
 logger = logging.getLogger(__name__)
 
+IMAGES_DIR = Path("/data/images")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
     yield
 
 
@@ -22,7 +27,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -33,6 +38,10 @@ app.include_router(models.router,        prefix="/api/models")
 app.include_router(upload.router,        prefix="/api")
 app.include_router(export.router,        prefix="/api")
 app.include_router(search.router,        prefix="/api")
+
+# 產圖靜態路由：/api/images/<filename>（確保目錄存在再 mount）
+IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/api/images", StaticFiles(directory=str(IMAGES_DIR)), name="images")
 
 
 @app.get("/health")

@@ -13,7 +13,7 @@ def now_iso() -> str:
 
 async def list_conversations(db: Connection) -> list:
     async with db.execute(
-        "SELECT id, title, model, updated_at FROM conversations ORDER BY updated_at DESC"
+        "SELECT id, title, model, system_prompt, updated_at FROM conversations ORDER BY updated_at DESC"
     ) as cur:
         rows = await cur.fetchall()
     return [dict(r) for r in rows]
@@ -24,12 +24,12 @@ async def create_conversation(db: Connection, model: str, title: str) -> dict:
     now = now_iso()
     clean_title = title[:50].strip() or "新對話"
     await db.execute(
-        "INSERT INTO conversations (id, title, model, created_at, updated_at) VALUES (?,?,?,?,?)",
-        (conv_id, clean_title, model, now, now)
+        "INSERT INTO conversations (id, title, model, system_prompt, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        (conv_id, clean_title, model, "", now, now)
     )
     await db.commit()
     return {"id": conv_id, "title": clean_title, "model": model,
-            "created_at": now, "updated_at": now, "messages": []}
+            "system_prompt": "", "created_at": now, "updated_at": now, "messages": []}
 
 
 async def get_conversation(db: Connection, conv_id: str) -> Optional[dict]:
@@ -42,6 +42,26 @@ async def get_conversation(db: Connection, conv_id: str) -> Optional[dict]:
     conv = dict(row)
     conv["messages"] = await list_messages(db, conv_id)
     return conv
+
+
+async def rename_conversation(db: Connection, conv_id: str, title: str) -> bool:
+    """更新對話標題，回傳是否成功"""
+    async with db.execute(
+        "UPDATE conversations SET title=?, updated_at=datetime('now') WHERE id=?",
+        (title, conv_id),
+    ) as cur:
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def update_system_prompt(db: Connection, conv_id: str, system_prompt: str) -> bool:
+    """更新對話 system prompt，回傳是否成功"""
+    async with db.execute(
+        "UPDATE conversations SET system_prompt=?, updated_at=datetime('now') WHERE id=?",
+        (system_prompt, conv_id),
+    ) as cur:
+        await db.commit()
+        return cur.rowcount > 0
 
 
 async def delete_conversation(db: Connection, conv_id: str) -> bool:
@@ -92,3 +112,24 @@ async def save_message(
     await db.commit()
     return {"id": msg_id, "conversation_id": conv_id, "role": role,
             "content": content, "images": images, "created_at": now}
+
+
+async def delete_messages_from(db: Connection, conv_id: str, from_message_id: str) -> int:
+    """刪除 conv_id 中，from_message_id（含）之後的所有訊息，回傳刪除筆數。
+    用於重新生成：截斷到指定 user message 之前再重送。"""
+    # 取得目標 message 的 created_at，刪除 >= 它的所有訊息
+    async with db.execute(
+        "SELECT created_at FROM messages WHERE id=? AND conversation_id=?",
+        (from_message_id, conv_id),
+    ) as cur:
+        row = await cur.fetchone()
+    if not row:
+        return 0
+    target_ts = row[0]
+    async with db.execute(
+        "DELETE FROM messages WHERE conversation_id=? AND created_at >= ?",
+        (conv_id, target_ts),
+    ) as cur:
+        deleted = cur.rowcount
+    await db.commit()
+    return deleted

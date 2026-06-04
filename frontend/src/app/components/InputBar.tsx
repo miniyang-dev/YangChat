@@ -1,11 +1,11 @@
 import { useRef, useState, type KeyboardEvent } from "react";
 import { Paperclip, FileText, Send, X, ImageIcon, Sparkles, Loader2 } from "lucide-react";
-import { uploadFile, uploadImage, generateImage, type UploadResult, type ImageUploadResult } from "../services/api";
+import { uploadFile, uploadImage, type UploadResult, type ImageUploadResult } from "../services/api";
 
 interface Props {
   disabled: boolean;
   onSend: (content: string, images: string[], fileContext?: string) => void;
-  onImageGenerated: (prompt: string, imageUrl: string) => void;
+  onImageGenerated: (prompt: string) => void;
 }
 
 // 合併 accept：圖片 + 文件
@@ -131,8 +131,8 @@ export function InputBar({ disabled, onSend, onImageGenerated }: Props) {
     setGenerating(true);
     setGenError("");
     try {
-      const result = await generateImage(trimmed);
-      onImageGenerated(trimmed, result.image_url);
+      // 把 prompt 傳給 Chat，由 Chat 帶 conversation_id 呼叫 API（才能存 DB）
+      onImageGenerated(trimmed);
       setShowGenModal(false);
       setGenPrompt("");
     } catch (err: unknown) {

@@ -36,6 +36,7 @@ async def init_db():
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
                 model TEXT NOT NULL,
+                system_prompt TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -86,4 +87,9 @@ async def init_db():
                     VALUES (new.rowid, new.content, new.conversation_id, new.role, new.created_at);
                 END;
         """)
-        await db.commit()
+        # Migration：為舊 DB 補 system_prompt 欄位（若已存在則忽略）
+        try:
+            await db.execute("ALTER TABLE conversations ADD COLUMN system_prompt TEXT NOT NULL DEFAULT ''")
+            await db.commit()
+        except Exception:
+            pass  # 欄位已存在，忽略

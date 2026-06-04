@@ -129,6 +129,29 @@ async def _execute_tool(name: str, arguments: str) -> str:
 
 # ── Non-streaming ─────────────────────────────────────────────────────────────
 
+async def generate_title(first_message: str, model: str) -> str:
+    """根據第一則訊息，用 AI 產生 5 字以內的對話標題（非同步背景用）"""
+    client = get_client()
+    try:
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        f"請用 10 字以內（繁體中文）為以下訊息取一個標題，"
+                        f"只回傳標題文字，不要標點符號、引號或任何多餘文字：\n\n{first_message[:200]}"
+                    ),
+                }
+            ],
+            max_tokens=30,
+        )
+        title = response.choices[0].message.content or ""
+        return title.strip()[:40] or first_message[:40]
+    except Exception:
+        return first_message[:40]
+
+
 async def chat_complete(messages: list, model: str) -> str:
     """非 streaming：支援 tool call loop，回傳完整回覆文字"""
     client = get_client()

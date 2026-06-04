@@ -75,6 +75,62 @@ export function useChat() {
     []
   );
 
+  const regenerate = useCallback(
+    (
+      convId: string,
+      messageId: string,
+      model: string,
+      currentMessages: Message[],
+    ) => {
+      abortRef.current?.abort();
+      setStreaming(true);
+      setStreamingText("");
+      setToolStatus("");
+      setStreamError("");
+      let accum = "";
+
+      abortRef.current = api.streamRegenerate(
+        convId,
+        messageId,
+        model,
+        (chunk) => {
+          accum += chunk;
+          setStreamingText(accum);
+        },
+        (userMsg) => {
+          // 用新的 user message 取代舊的（後端重新存了新 ID）
+          setMessages((prev) => {
+            const idx = prev.findIndex((m) => m.id === messageId);
+            // 找到 messageId 之前的那則 user message，替換之
+            const userIdx = idx > 0
+              ? prev.slice(0, idx).map((m, i) => ({ m, i })).reverse().find(({ m }) => m.role === "user")?.i
+              : undefined;
+            if (userIdx !== undefined) {
+              const next = [...prev.slice(0, userIdx), userMsg];
+              return next;
+            }
+            return prev;
+          });
+        },
+        (assistantMsg) => {
+          setMessages((prev) => [...prev, assistantMsg]);
+          setStreamingText("");
+          setStreaming(false);
+        },
+        () => setStreaming(false),
+        (err) => {
+          console.error("regenerate error:", err);
+          setStreamError("重新生成失敗，請稍後再試");
+          setStreaming(false);
+          setStreamingText("");
+          // 還原原本的訊息列表
+          setMessages(currentMessages);
+        },
+      );
+    },
+    []
+  );
+
   const abort = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
@@ -83,5 +139,5 @@ export function useChat() {
     setToolStatus("");
   }, []);
 
-  return { messages, streamingText, toolStatus, streaming, streamError, setHistory, sendStream, abort };
+  return { messages, streamingText, toolStatus, streaming, streamError, setHistory, sendStream, regenerate, abort };
 }

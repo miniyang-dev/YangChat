@@ -163,6 +163,72 @@ export function streamMessage(
   return controller;
 }
 
+export function streamRegenerate(
+  conversationId: string,
+  messageId: string,
+  model: string,
+  onChunk: (text: string) => void,
+  onUserMessage: (msg: Message) => void,
+  onAssistantMessage: (msg: Message) => void,
+  onDone: () => void,
+  onError: (err: string) => void,
+): AbortController {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/messages/regenerate`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ conversation_id: conversationId, message_id: messageId, model }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          window.location.href = "/login";
+        }
+        onError(`伺服器錯誤 (HTTP ${res.status})`);
+        return;
+      }
+      if (!res.body) { onError("No response body"); return; }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data: ")) continue;
+          const data = trimmed.slice(6);
+          if (data === "[DONE]") { onDone(); return; }
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.type === "user_message") onUserMessage(parsed.message);
+            else if (parsed.type === "assistant_message") onAssistantMessage(parsed.message);
+            else if (parsed.type === "error") onError(parsed.error);
+            else if (parsed.content) onChunk(parsed.content);
+          } catch (e) {
+            if (import.meta.env.DEV) console.warn("SSE parse error:", e, data);
+          }
+        }
+      }
+      onDone();
+    } catch (e: unknown) {
+      if ((e as Error).name !== "AbortError") onError(String(e));
+    }
+  })();
+
+  return controller;
+}
+
 // --- Models ---
 export async function listModels(): Promise<ModelInfo[]> {
   const res = await req<{ success: boolean; data: ModelInfo[] }>("/models", {
@@ -220,6 +286,25 @@ export async function uploadImage(file: File): Promise<ImageUploadResult> {
   return res.json();
 }
 
+// --- Conversation rename ---
+export async function renameConversation(id: string, title: string): Promise<void> {
+  const token = localStorage.getItem("token") ?? "";
+  await fetch(`${BASE_URL}/conversations/${id}/title`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ title }),
+  });
+}
+
+export async function updateSystemPrompt(id: string, system_prompt: string): Promise<void> {
+  const token = localStorage.getItem("token") ?? "";
+  await fetch(`${BASE_URL}/conversations/${id}/system-prompt`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ system_prompt }),
+  });
+}
+
 // --- Image Generation（Gemini 3.1 Flash Image）---
 export interface GenerateImageResult {
   success: boolean;
@@ -227,11 +312,11 @@ export interface GenerateImageResult {
   prompt: string;
 }
 
-export async function generateImage(prompt: string): Promise<GenerateImageResult> {
+export async function generateImage(prompt: string, conversationId?: string): Promise<GenerateImageResult> {
   return req<GenerateImageResult>("/generate-image", {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ prompt, conversation_id: conversationId ?? null }),
   });
 }
 

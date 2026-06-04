@@ -8,9 +8,10 @@ interface Props {
   streamingText: string;
   toolStatus: string;
   isStreaming: boolean;
+  onRegenerate?: (messageId: string) => void;
 }
 
-export function ChatWindow({ messages, streamingText, toolStatus, isStreaming }: Props) {
+export function ChatWindow({ messages, streamingText, toolStatus, isStreaming, onRegenerate }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,7 +41,11 @@ export function ChatWindow({ messages, streamingText, toolStatus, isStreaming }:
     <div className="flex-1 overflow-y-auto px-6 py-6">
       <div className="max-w-3xl mx-auto w-full">
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            onRegenerate={msg.role === "assistant" ? onRegenerate : undefined}
+          />
         ))}
 
         {/* 工具使用中提示（搜尋中...）*/}

@@ -27,8 +27,8 @@ class ConversationSummary(BaseModel):
     id: str
     title: str
     model: str
+    system_prompt: str = ""
     updated_at: str
-
 
 class MessageOut(BaseModel):
     id: str

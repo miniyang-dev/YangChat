@@ -5,11 +5,18 @@ POST /api/upload-image → 圖片送 Gemini Flash 描述，回傳文字描述
 """
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from pydantic import BaseModel, Field
-from src.api.deps import get_current_user
+from src.api.deps import get_current_user, db_dep
 from src.config import settings
 from src.services.file_service import extract_text, describe_image, generate_image, SUPPORTED_IMAGE_TYPES
+import aiosqlite
+import base64
+import uuid
+from pathlib import Path
 
-router = APIRouter()
+router = APIRouter(tags=["upload"])
+
+IMAGES_DIR = Path("/data/images")
+
 
 
 @router.post("/upload")
@@ -93,16 +100,19 @@ async def upload_image(
 
 class GenerateImageRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=2000, description="產圖 prompt")
+    conversation_id: str | None = Field(default=None, description="要存入的對話 ID（選填）")
 
 
 @router.post("/generate-image")
 async def generate_image_endpoint(
     body: GenerateImageRequest,
+    db: aiosqlite.Connection = Depends(db_dep),
     current_user: dict = Depends(get_current_user),
 ):
     """
     根據文字 prompt 呼叫 Gemini 3.1 Flash Image 產圖。
-    回傳 base64 data URL，前端直接用 <img src="..."> 顯示。
+    若提供 conversation_id，產圖結果會存入 DB 訊息歷史（重整後仍可見）。
+    回傳 image_url：可能是 /api/images/<uuid>.jpg（已存檔）或 base64 data URL（未帶對話 ID）。
     """
     if not settings.GEMINI_API_KEY:
         raise HTTPException(status_code=503, detail="產圖功能未設定（缺少 GEMINI_API_KEY）")
@@ -116,8 +126,36 @@ async def generate_image_endpoint(
         logging.getLogger(__name__).error("產圖失敗: %s", e, exc_info=True)
         raise HTTPException(status_code=502, detail="產圖失敗，請稍後再試")
 
+    # 若有 conversation_id，把圖存到 /data/images/ 並寫入 DB messages
+    image_url = data_url  # 預設回傳 base64
+    if body.conversation_id:
+        try:
+            from src.services import db_service
+            # 把 base64 decode 存成 JPEG 檔
+            IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+            header, b64data = data_url.split(",", 1)
+            img_bytes = base64.b64decode(b64data)
+            filename = f"{uuid.uuid4().hex}.jpg"
+            filepath = IMAGES_DIR / filename
+            filepath.write_bytes(img_bytes)
+            image_url = f"/api/images/{filename}"
+
+            # 存入 DB：user 訊息（prompt）+ assistant 訊息（圖片）
+            await db_service.save_message(
+                db, body.conversation_id, "user", f"[產圖] {body.prompt}"
+            )
+            await db_service.save_message(
+                db, body.conversation_id, "assistant",
+                f"已為你產生圖片：{body.prompt}",
+                images=[image_url],
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("產圖存 DB 失敗（不影響回傳）: %s", e)
+            image_url = data_url  # 存檔失敗 fallback 回 base64
+
     return {
         "success": True,
-        "image_url": data_url,   # data:image/jpeg;base64,...
+        "image_url": image_url,
         "prompt": body.prompt,
     }

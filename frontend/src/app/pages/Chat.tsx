@@ -4,22 +4,24 @@ import { Sidebar } from "../components/Sidebar";
 import { ChatWindow } from "../components/ChatWindow";
 import { InputBar } from "../components/InputBar";
 import { ModelSelector } from "../components/ModelSelector";
+import { SystemPromptPanel } from "../components/SystemPromptPanel";
 import { useConversations } from "../hooks/useConversations";
 import { useChat } from "../hooks/useChat";
-import { createConversation, getConversation, listModels, exportPptx } from "../services/api";
+import { createConversation, getConversation, listModels, exportPptx, generateImage, updateSystemPrompt } from "../services/api";
 import type { ModelInfo, Message } from "../types";
-import { Download } from "lucide-react";
+import { Download, Settings2 } from "lucide-react";
 
 export function Chat() {
   const navigate = useNavigate();
   const { conversations, setConversations, loadError, load, remove } = useConversations();
-  const { messages, streamingText, toolStatus, streaming, streamError, setHistory, sendStream, abort } = useChat();
+  const { messages, streamingText, toolStatus, streaming, streamError, setHistory, sendStream, regenerate, abort } = useChat();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [selectedModel, setSelectedModel] = useState("claude-sonnet-4-6");
   const [modelsError, setModelsError] = useState(false);
   const [exportingPptx, setExportingPptx] = useState(false);
   const [pptxError, setPptxError] = useState<string>("");
+  const [showSystemPrompt, setShowSystemPrompt] = useState(false);
 
   // F-C3: 用 ref 追蹤「目前應顯示哪個對話」，防止 race condition
   const activeIdRef = useRef<string | null>(null);
@@ -36,6 +38,18 @@ export function Chat() {
         setModelsError(true);
       });
   }, [load]);
+
+  // 新建對話後，背景等 AI 命名完成再更新 sidebar 標題
+  const pollTitle = useCallback((convId: string) => {
+    setTimeout(async () => {
+      try {
+        const detail = await getConversation(convId);
+        setConversations((prev) =>
+          prev.map((c) => (c.id === convId ? { ...c, title: detail.title } : c))
+        );
+      } catch (_) {}
+    }, 2500);
+  }, [setConversations]);
 
   // 切換對話 — FC-1: 先 abort 舊 stream，FC-3 race condition 防護
   const selectConversation = useCallback(
@@ -94,9 +108,10 @@ export function Chat() {
           setActiveId(convId);
           activeIdRef.current = convId;
           setConversations((prev) => [
-            { id: conv.id, title: conv.title, model: conv.model, updated_at: conv.updated_at },
+            { id: conv.id, title: conv.title, model: conv.model, system_prompt: "", updated_at: conv.updated_at },
             ...prev,
           ]);
+          pollTitle(conv.id);
         } catch (err) {
           console.error("建立對話失敗", err);
           return; // F-W: 建立失敗就不繼續送 stream
@@ -123,30 +138,31 @@ export function Chat() {
     [streaming, activeId, selectedModel, sendStream, setConversations]
   );
 
-  // 產圖完成 → 直接把圖片塞進 messages（不走 AI stream）
+  // 產圖完成 → 呼叫後端 API（帶 conversation_id 存 DB），再更新本地 messages
   const handleImageGenerated = useCallback(
-    async (prompt: string, imageUrl: string) => {
+    async (prompt: string) => {
       let convId = activeId;
 
       // 若沒有對話，先建立一個
       if (!convId) {
         try {
-          const conv = await createConversation(selectedModel, prompt);
+          const conv = await createConversation(selectedModel, `[產圖] ${prompt}`);
           convId = conv.id;
           setActiveId(convId);
           activeIdRef.current = convId;
           setConversations((prev) => [
-            { id: conv.id, title: conv.title, model: conv.model, updated_at: conv.updated_at },
+            { id: conv.id, title: conv.title, model: conv.model, system_prompt: "", updated_at: conv.updated_at },
             ...prev,
           ]);
+          pollTitle(conv.id);
         } catch (err) {
           console.error("建立對話失敗", err);
           return;
         }
       }
 
+      // 先在 UI 顯示 loading（user 訊息先到）
       const now = new Date().toISOString();
-      // 在本地 messages 加上 user prompt + assistant 圖片（UI only，不存 DB）
       const userMsg: Message = {
         id: `local-user-${Date.now()}`,
         conversation_id: convId,
@@ -154,17 +170,39 @@ export function Chat() {
         content: `🎨 產圖：${prompt}`,
         created_at: now,
       };
-      const assistantMsg: Message = {
-        id: `local-assistant-${Date.now()}`,
-        conversation_id: convId,
-        role: "assistant",
-        content: "",
-        images: [imageUrl],
-        created_at: now,
-      };
-      setHistory([...messages, userMsg, assistantMsg]);
+      setHistory([...messages, userMsg]);
+
+      try {
+        const result = await generateImage(prompt, convId);
+        // 用後端回傳的 image_url（可能是 /api/images/xxx.jpg 或 base64）
+        const assistantMsg: Message = {
+          id: `local-assistant-${Date.now()}`,
+          conversation_id: convId,
+          role: "assistant",
+          content: `已為你產生圖片：${prompt}`,
+          images: [result.image_url],
+          created_at: new Date().toISOString(),
+        };
+        setHistory([...messages, userMsg, assistantMsg]);
+        // 更新 sidebar 時間
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === convId ? { ...c, updated_at: new Date().toISOString() } : c
+          ).sort((a, b) => (a.updated_at > b.updated_at ? -1 : 1))
+        );
+      } catch (err) {
+        console.error("產圖失敗", err);
+        const errMsg: Message = {
+          id: `local-err-${Date.now()}`,
+          conversation_id: convId,
+          role: "assistant",
+          content: "⚠️ 產圖失敗，請稍後再試",
+          created_at: new Date().toISOString(),
+        };
+        setHistory([...messages, userMsg, errMsg]);
+      }
     },
-    [activeId, selectedModel, messages, setHistory, setConversations]
+    [activeId, selectedModel, messages, setHistory, setConversations, pollTitle]
   );
 
   const handleLogout = () => {
@@ -172,6 +210,14 @@ export function Chat() {
     localStorage.removeItem("token");
     navigate("/login", { replace: true });
   };
+
+  const handleRegenerate = useCallback(
+    (messageId: string) => {
+      if (!activeId || streaming) return;
+      regenerate(activeId, messageId, selectedModel, messages);
+    },
+    [activeId, streaming, selectedModel, messages, regenerate]
+  );
 
   const handleExportPptx = useCallback(async () => {
     if (messages.length === 0 || exportingPptx) return;
@@ -259,6 +305,21 @@ export function Chat() {
                 {exportingPptx ? "產生中..." : "匯出 PPTX"}
               </button>
             )}
+            {/* System Prompt 設定按鈕 */}
+            {activeId && (
+              <button
+                onClick={() => setShowSystemPrompt((v) => !v)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] transition-all duration-150"
+                style={{
+                  color: showSystemPrompt ? "#5e6ad2" : "#9499a5",
+                  border: `1px solid ${showSystemPrompt ? "rgba(94,106,210,0.4)" : "rgba(255,255,255,0.1)"}`,
+                }}
+                title="System Prompt 設定"
+              >
+                <Settings2 size={13} />
+                System Prompt
+              </button>
+            )}
             <button
               onClick={handleLogout}
               className="text-[13px] transition-colors duration-150"
@@ -286,6 +347,7 @@ export function Chat() {
           streamingText={streamingText}
           toolStatus={toolStatus}
           isStreaming={streaming}
+          onRegenerate={handleRegenerate}
         />
 
         {/* 輸入框 */}
@@ -295,6 +357,23 @@ export function Chat() {
           onImageGenerated={handleImageGenerated}
         />
       </div>
+
+      {/* System Prompt 側邊欄 */}
+      {showSystemPrompt && activeId && (
+        <div className="w-72 flex-shrink-0">
+          <SystemPromptPanel
+            convId={activeId}
+            initialPrompt={conversations.find((c) => c.id === activeId)?.system_prompt ?? ""}
+            onSave={async (prompt) => {
+              await updateSystemPrompt(activeId, prompt);
+              setConversations((prev) =>
+                prev.map((c) => (c.id === activeId ? { ...c, system_prompt: prompt } : c))
+              );
+            }}
+            onClose={() => setShowSystemPrompt(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }

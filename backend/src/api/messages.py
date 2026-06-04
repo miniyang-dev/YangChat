@@ -1,7 +1,9 @@
 import json
 import logging
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from src.api.deps import get_current_user, db_dep
 from src.models.schemas import SendMessageRequest, SendMessageResponse, MessageOut
 from src.services import db_service, ai_service
@@ -12,9 +14,11 @@ router = APIRouter(tags=["messages"])
 logger = logging.getLogger(__name__)
 
 
-def _build_history(messages: list) -> list:
-    """將 DB messages 轉成 OpenAI messages 格式"""
+def _build_history(messages: list, system_prompt: str = "") -> list:
+    """將 DB messages 轉成 OpenAI messages 格式，若有 system_prompt 則置首"""
     result = []
+    if system_prompt.strip():
+        result.append({"role": "system", "content": system_prompt.strip()})
     for m in messages:
         content = ai_service.build_content(m["content"], m.get("images"))
         result.append({"role": m["role"], "content": content})
@@ -61,7 +65,7 @@ async def send_message(
     )
 
     # 組建歷史 + 附加文件 context
-    history = _build_history(conv["messages"])
+    history = _build_history(conv["messages"], conv.get("system_prompt", ""))
     history.append({
         "role": "user",
         "content": _build_user_content_with_file(body.content, body.images, body.file_context),
@@ -112,7 +116,7 @@ async def stream_message(
     )
 
     # 組建歷史 + 附加文件 context（僅這次呼叫注入，不存 DB）
-    history = _build_history(conv["messages"])
+    history = _build_history(conv["messages"], conv.get("system_prompt", ""))
     history.append({
         "role": "user",
         "content": _build_user_content_with_file(body.content, body.images, body.file_context),
@@ -170,6 +174,111 @@ async def stream_message(
             # C-1: 直接存失敗才 fallback 到 background task，避免雙重寫入
             background_tasks.add_task(save_assistant_reply, full_reply)
             # 即使存檔失敗，仍然要告知前端 streaming 完成（用 content 代替完整 message）
+            yield f"data: {json.dumps({'type': 'assistant_message', 'message': {'id': '', 'conversation_id': conv_id, 'role': 'assistant', 'content': full_reply, 'images': None, 'created_at': ''}})}\n\n"
+
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+class RegenerateRequest(BaseModel):
+    conversation_id: str
+    message_id: str   # 要重新生成的 assistant message（其前一則 user message 為起點）
+    model: Optional[str] = None
+
+
+@router.post("/regenerate")
+async def regenerate_message(
+    body: RegenerateRequest,
+    background_tasks: BackgroundTasks,
+    db: aiosqlite.Connection = Depends(db_dep),
+    _: str = Depends(get_current_user),
+):
+    """重新生成指定 assistant 訊息：找到它前一則 user 訊息，截斷後重新 stream。"""
+    conv = await db_service.get_conversation(db, body.conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    model = body.model or conv["model"] or settings.DEFAULT_MODEL
+
+    from src.services.ai_service import AVAILABLE_MODELS
+    valid_model_ids = {m["id"] for m in AVAILABLE_MODELS}
+    if body.model and body.model not in valid_model_ids:
+        raise HTTPException(status_code=400, detail=f"不支援的模型：{body.model}")
+
+    # 找到 message_id 以及其前一則 user message
+    msgs = conv["messages"]
+    target_idx = next((i for i, m in enumerate(msgs) if m["id"] == body.message_id), None)
+    if target_idx is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    # 找前一則 user 訊息
+    user_msg_idx = next(
+        (i for i in range(target_idx - 1, -1, -1) if msgs[i]["role"] == "user"), None
+    )
+    if user_msg_idx is None:
+        raise HTTPException(status_code=400, detail="找不到對應的 user 訊息")
+
+    user_msg = msgs[user_msg_idx]
+
+    # 刪除 user message 之後（含）的所有訊息（含原 user msg 本身）
+    await db_service.delete_messages_from(db, body.conversation_id, user_msg["id"])
+
+    # 重新存 user message
+    new_user_msg = await db_service.save_message(
+        db, body.conversation_id, "user", user_msg["content"], user_msg.get("images")
+    )
+
+    # 重建歷史（截斷到 user_msg 之前）
+    history = _build_history(msgs[:user_msg_idx], conv.get("system_prompt", ""))
+    history.append({
+        "role": "user",
+        "content": ai_service.build_content(user_msg["content"], user_msg.get("images")),
+    })
+
+    collected: list[str] = []
+    conv_id = body.conversation_id
+
+    async def save_assistant_reply(full_reply: str) -> None:
+        if not full_reply.strip():
+            return
+        from src.database import get_db_ctx
+        try:
+            async with get_db_ctx() as bg_db:
+                await db_service.save_message(bg_db, conv_id, "assistant", full_reply)
+        except Exception as e:
+            logger.error("Regenerate background save failed: %s", e, exc_info=True)
+
+    async def event_generator():
+        # 先送新的 user_message（讓前端更新 ID）
+        yield f"data: {json.dumps({'type': 'user_message', 'message': new_user_msg})}\n\n"
+
+        full_reply = ""
+        try:
+            async for chunk in ai_service.chat_stream(history, model):
+                if chunk.strip() == "data: [DONE]":
+                    break
+                try:
+                    data_str = chunk.removeprefix("data: ").strip()
+                    data = json.loads(data_str)
+                    delta = data.get("content", "")
+                    collected.append(delta)
+                    full_reply += delta
+                    yield chunk
+                except Exception as e:
+                    logger.debug("SSE parse skip: %s", e)
+        except Exception as e:
+            logger.error("Regenerate streaming 失敗: %s", e, exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'error': 'AI 服務暫時無法使用'})}\n\n"
+            return
+
+        full_reply = "".join(collected)
+        try:
+            asst_msg = await db_service.save_message(db, conv_id, "assistant", full_reply)
+            yield f"data: {json.dumps({'type': 'assistant_message', 'message': asst_msg})}\n\n"
+        except Exception as e:
+            logger.error("Regenerate direct save failed: %s", e)
+            background_tasks.add_task(save_assistant_reply, full_reply)
             yield f"data: {json.dumps({'type': 'assistant_message', 'message': {'id': '', 'conversation_id': conv_id, 'role': 'assistant', 'content': full_reply, 'images': None, 'created_at': ''}})}\n\n"
 
         yield "data: [DONE]\n\n"

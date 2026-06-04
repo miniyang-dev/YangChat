@@ -57,6 +57,7 @@ export function InputBar({ disabled, onSend, onImageGenerated }: Props) {
   };
 
   const handleKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing) return; // IME 組字中（注音/拼音選字），不觸發送出
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (!disabled) handleSend();
@@ -143,6 +144,7 @@ export function InputBar({ disabled, onSend, onImageGenerated }: Props) {
   };
 
   const handleGenModalKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing) return; // IME 組字中，不觸發送出
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (!generating) handleGenerate();

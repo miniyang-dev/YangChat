@@ -110,7 +110,38 @@ test.describe("YangChat E2E", () => {
     ).toBeVisible({ timeout: 8000 });
   });
 
-  // 6. 登出
+  // 6. 產圖功能
+  test("Sparkles 按鈕顯示產圖 Modal", async ({ page }) => {
+    await login(page);
+    await page.getByRole("button", { name: "新對話" }).click();
+    // 點 Sparkles 按鈕（title="AI 產圖"）
+    await page.locator('button[title="AI 產圖"]').click();
+    // Modal 出現
+    await expect(page.locator("text=AI 產圖")).toBeVisible({ timeout: 3000 });
+    await expect(page.getByPlaceholder(/描述你想要的圖片/)).toBeVisible();
+  });
+
+  test("產圖 Modal 可輸入 prompt 且 Esc 關閉", async ({ page }) => {
+    await login(page);
+    await page.getByRole("button", { name: "新對話" }).click();
+    await page.locator('button[title="AI 產圖"]').click();
+    const promptInput = page.getByPlaceholder(/描述你想要的圖片/);
+    await promptInput.fill("一隻可愛的貓咪");
+    await expect(promptInput).toHaveValue("一隻可愛的貓咪");
+    // Esc 關閉
+    await promptInput.press("Escape");
+    await expect(promptInput).not.toBeVisible({ timeout: 2000 });
+  });
+
+  test("空 prompt 時產圖按鈕停用", async ({ page }) => {
+    await login(page);
+    await page.getByRole("button", { name: "新對話" }).click();
+    await page.locator('button[title="AI 產圖"]').click();
+    // 空 prompt → 產生圖片按鈕 disabled
+    await expect(page.getByRole("button", { name: /產生圖片/ })).toBeDisabled();
+  });
+
+  // 7. 登出
   test("登出後回到登入頁", async ({ page }) => {
     await login(page);
     const logoutBtn = page.locator("button[title=\'登出\']").or(

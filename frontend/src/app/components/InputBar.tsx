@@ -1,10 +1,11 @@
 import { useRef, useState, type KeyboardEvent } from "react";
-import { Paperclip, FileText, Send, X, ImageIcon } from "lucide-react";
-import { uploadFile, uploadImage, type UploadResult, type ImageUploadResult } from "../services/api";
+import { Paperclip, FileText, Send, X, ImageIcon, Sparkles, Loader2 } from "lucide-react";
+import { uploadFile, uploadImage, generateImage, type UploadResult, type ImageUploadResult } from "../services/api";
 
 interface Props {
   disabled: boolean;
   onSend: (content: string, images: string[], fileContext?: string) => void;
+  onImageGenerated: (prompt: string, imageUrl: string) => void;
 }
 
 // 合併 accept：圖片 + 文件
@@ -13,7 +14,7 @@ const ACCEPTED_ALL = "image/jpeg,image/png,image/gif,image/webp,.pdf,.pptx,.docx
 const ALLOWED_IMG_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 const ALLOWED_DOC_EXT = [".pdf", ".pptx", ".docx", ".txt", ".md", ".csv"];
 
-export function InputBar({ disabled, onSend }: Props) {
+export function InputBar({ disabled, onSend, onImageGenerated }: Props) {
   const [text, setText] = useState("");
 
   // 文件上傳狀態（PDF/PPTX/DOCX/TXT/MD/CSV）
@@ -25,6 +26,12 @@ export function InputBar({ disabled, onSend }: Props) {
   const [uploadedImage, setUploadedImage] = useState<ImageUploadResult | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageError, setImageError] = useState<string>("");
+
+  // 產圖 Modal 狀態
+  const [showGenModal, setShowGenModal] = useState(false);
+  const [genPrompt, setGenPrompt] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string>("");
 
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -117,6 +124,36 @@ export function InputBar({ disabled, onSend }: Props) {
   const removeFile = () => { setUploadedFile(null); setFileError(""); };
   const removeImage = () => { setUploadedImage(null); setImageError(""); };
 
+  // ── 產圖 Modal ────────────────────────────────────────────────────────────
+  const handleGenerate = async () => {
+    const trimmed = genPrompt.trim();
+    if (!trimmed) return;
+    setGenerating(true);
+    setGenError("");
+    try {
+      const result = await generateImage(trimmed);
+      onImageGenerated(trimmed, result.image_url);
+      setShowGenModal(false);
+      setGenPrompt("");
+    } catch (err: unknown) {
+      setGenError((err as Error).message || "產圖失敗，請重試");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleGenModalKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (!generating) handleGenerate();
+    }
+    if (e.key === "Escape") {
+      setShowGenModal(false);
+      setGenPrompt("");
+      setGenError("");
+    }
+  };
+
   const isUploading = uploading || uploadingImage;
 
   const sendDisabled =
@@ -194,6 +231,62 @@ export function InputBar({ disabled, onSend }: Props) {
           </p>
         )}
 
+        {/* 產圖 Modal */}
+        {showGenModal && (
+          <div
+            className="mb-3 rounded-xl p-4"
+            style={{
+              backgroundColor: "#111219",
+              border: "1px solid rgba(94,106,210,0.4)",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+            }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles size={14} style={{ color: "#5e6ad2" }} />
+              <span className="text-xs font-medium" style={{ color: "#9499a5" }}>
+                AI 產圖（Gemini 3.1 Flash）
+              </span>
+              <button
+                className="ml-auto"
+                onClick={() => { setShowGenModal(false); setGenPrompt(""); setGenError(""); }}
+              >
+                <X size={14} style={{ color: "#62666d" }} />
+              </button>
+            </div>
+            <textarea
+              autoFocus
+              value={genPrompt}
+              onChange={e => setGenPrompt(e.target.value)}
+              onKeyDown={handleGenModalKey}
+              disabled={generating}
+              placeholder="描述你想要的圖片，例如：一隻貓咪坐在台北101前，夕陽背景，水彩風格"
+              rows={3}
+              className="w-full bg-transparent text-[13px] resize-none outline-none leading-relaxed disabled:opacity-50"
+              style={{ color: "#f0f1f3", lineHeight: "1.6" }}
+            />
+            {genError && (
+              <p className="text-red-400 text-xs mt-2">{genError}</p>
+            )}
+            <div className="flex items-center justify-between mt-3">
+              <p className="text-xs" style={{ color: "#62666d" }}>
+                Enter 送出・Shift+Enter 換行・Esc 關閉
+              </p>
+              <button
+                onClick={handleGenerate}
+                disabled={generating || !genPrompt.trim()}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                style={{ backgroundColor: "#5e6ad2" }}
+              >
+                {generating ? (
+                  <><Loader2 size={12} className="animate-spin" /> 產圖中...</>
+                ) : (
+                  <><Sparkles size={12} /> 產生圖片</>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Unified input box */}
         <form
           data-testid="chat-form"
@@ -254,6 +347,32 @@ export function InputBar({ disabled, onSend }: Props) {
               className="hidden"
               onChange={handleFileChange}
             />
+
+            {/* 產圖按鈕 */}
+            <button
+              type="button"
+              onClick={() => { setShowGenModal(v => !v); setGenError(""); }}
+              disabled={disabled}
+              className="p-2 rounded-lg transition-all duration-150 flex-shrink-0"
+              style={{
+                color: showGenModal ? "#5e6ad2" : "#62666d",
+                opacity: disabled ? 0.3 : 1,
+                backgroundColor: showGenModal ? "rgba(94,106,210,0.12)" : "transparent",
+              }}
+              onMouseEnter={e => {
+                if (!disabled) {
+                  (e.currentTarget as HTMLButtonElement).style.color = "#9499a5";
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(255,255,255,0.05)";
+                }
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLButtonElement).style.color = showGenModal ? "#5e6ad2" : "#62666d";
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor = showGenModal ? "rgba(94,106,210,0.12)" : "transparent";
+              }}
+              title="AI 產圖"
+            >
+              <Sparkles size={18} />
+            </button>
 
             {/* 文字輸入 */}
             <textarea

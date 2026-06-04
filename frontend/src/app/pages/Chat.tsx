@@ -7,7 +7,7 @@ import { ModelSelector } from "../components/ModelSelector";
 import { useConversations } from "../hooks/useConversations";
 import { useChat } from "../hooks/useChat";
 import { createConversation, getConversation, listModels, exportPptx } from "../services/api";
-import type { ModelInfo } from "../types";
+import type { ModelInfo, Message } from "../types";
 import { Download } from "lucide-react";
 
 export function Chat() {
@@ -121,6 +121,50 @@ export function Chat() {
       );
     },
     [streaming, activeId, selectedModel, sendStream, setConversations]
+  );
+
+  // 產圖完成 → 直接把圖片塞進 messages（不走 AI stream）
+  const handleImageGenerated = useCallback(
+    async (prompt: string, imageUrl: string) => {
+      let convId = activeId;
+
+      // 若沒有對話，先建立一個
+      if (!convId) {
+        try {
+          const conv = await createConversation(selectedModel, prompt);
+          convId = conv.id;
+          setActiveId(convId);
+          activeIdRef.current = convId;
+          setConversations((prev) => [
+            { id: conv.id, title: conv.title, model: conv.model, updated_at: conv.updated_at },
+            ...prev,
+          ]);
+        } catch (err) {
+          console.error("建立對話失敗", err);
+          return;
+        }
+      }
+
+      const now = new Date().toISOString();
+      // 在本地 messages 加上 user prompt + assistant 圖片（UI only，不存 DB）
+      const userMsg: Message = {
+        id: `local-user-${Date.now()}`,
+        conversation_id: convId,
+        role: "user",
+        content: `🎨 產圖：${prompt}`,
+        created_at: now,
+      };
+      const assistantMsg: Message = {
+        id: `local-assistant-${Date.now()}`,
+        conversation_id: convId,
+        role: "assistant",
+        content: "",
+        images: [imageUrl],
+        created_at: now,
+      };
+      setHistory([...messages, userMsg, assistantMsg]);
+    },
+    [activeId, selectedModel, messages, setHistory, setConversations]
   );
 
   const handleLogout = () => {
@@ -248,6 +292,7 @@ export function Chat() {
         <InputBar
           disabled={streaming}
           onSend={handleSend}
+          onImageGenerated={handleImageGenerated}
         />
       </div>
     </div>

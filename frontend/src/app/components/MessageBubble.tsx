@@ -66,9 +66,25 @@ export function MessageBubble({ message }: Props) {
             boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
           }}
         >
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {message.content}
-          </ReactMarkdown>
+          {/* 產圖結果（assistant images） */}
+          {message.images && message.images.length > 0 && (
+            <div className="flex flex-wrap gap-3 mb-3">
+              {message.images.map((img, i) => (
+                <img
+                  key={i}
+                  src={img}
+                  alt={`產圖 ${i + 1}`}
+                  className="max-w-full rounded-lg object-contain"
+                  style={{ maxHeight: "480px", border: "1px solid rgba(255,255,255,0.1)" }}
+                />
+              ))}
+            </div>
+          )}
+          {message.content && (
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          )}
         </div>
       </div>
     </div>

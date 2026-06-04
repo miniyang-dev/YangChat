@@ -140,6 +140,37 @@ SUPPORTED_IMAGE_TYPES = {
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
 
 
+async def generate_image(prompt: str, api_key: str) -> str:
+    """
+    用 Gemini 3.1 Flash Image 根據文字 prompt 產生圖片。
+    回傳 base64 data URL（data:image/jpeg;base64,...），供前端直接顯示。
+    """
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent"
+
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }],
+        "generationConfig": {
+            "responseModalities": ["TEXT", "IMAGE"]
+        }
+    }
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(url, json=payload, headers={"x-goog-api-key": api_key})
+        resp.raise_for_status()
+        data = resp.json()
+
+    parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+    for part in parts:
+        if "inlineData" in part:
+            mime = part["inlineData"].get("mimeType", "image/jpeg")
+            b64 = part["inlineData"]["data"]
+            return f"data:{mime};base64,{b64}"
+
+    raise ValueError("Gemini 未回傳圖片，請修改 prompt 後重試")
+
+
 async def describe_image(image_bytes: bytes, content_type: str, api_key: str) -> str:
     """
     把圖片送給 Gemini Flash，回傳圖片的詳細文字描述。
@@ -183,7 +214,7 @@ async def describe_image(image_bytes: bytes, content_type: str, api_key: str) ->
         }
     }
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent"
 
     async with httpx.AsyncClient(timeout=30) as client:
         # W-2: API key 用 header 傳送，避免出現在 access log / URL 中

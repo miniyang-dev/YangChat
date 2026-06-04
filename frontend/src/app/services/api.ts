@@ -220,6 +220,21 @@ export async function uploadImage(file: File): Promise<ImageUploadResult> {
   return res.json();
 }
 
+// --- Image Generation（Gemini 3.1 Flash Image）---
+export interface GenerateImageResult {
+  success: boolean;
+  image_url: string;   // data:image/jpeg;base64,...
+  prompt: string;
+}
+
+export async function generateImage(prompt: string): Promise<GenerateImageResult> {
+  return req<GenerateImageResult>("/generate-image", {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({ prompt }),
+  });
+}
+
 // --- Search ---
 export interface SearchResult {
   message_id: string;

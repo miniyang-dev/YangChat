@@ -14,7 +14,7 @@ export function MessageBubble({ message }: Props) {
       <div className="flex justify-end mb-5">
         <div
           className="max-w-[70%] rounded-2xl rounded-br-sm px-4 py-3 text-[14px] leading-relaxed text-white"
-          style={{ backgroundColor: "#3b4fd4" }}
+          style={{ backgroundColor: "#5e6ad2", borderRadius: "12px 4px 12px 12px", boxShadow: "0 1px 4px rgba(94,106,210,0.3), 0 2px 12px rgba(94,106,210,0.15)" }}
         >
           {/* 圖片縮圖（user 附圖） */}
           {message.images && message.images.length > 0 && (
@@ -62,6 +62,8 @@ export function MessageBubble({ message }: Props) {
           style={{
             backgroundColor: "#131520",
             border: "1px solid rgba(255,255,255,0.07)",
+            borderRadius: "4px 12px 12px 12px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
           }}
         >
           <ReactMarkdown remarkPlugins={[remarkGfm]}>

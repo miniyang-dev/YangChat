@@ -120,9 +120,9 @@ export function Sidebar({ conversations, activeId, onSelect, onDelete, onNew, lo
             <button
               onClick={onNew}
               className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-white text-[13px] font-medium transition-all duration-150"
-              style={{ backgroundColor: "#5e6ad2" }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#6e7ae0")}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = "#5e6ad2")}
+              style={{ backgroundColor: "#5e6ad2", boxShadow: "0 1px 3px rgba(94,106,210,0.3), 0 0 0 1px rgba(94,106,210,0.2)" }}
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#6e7ae0"; e.currentTarget.style.boxShadow = "0 2px 8px rgba(94,106,210,0.4), 0 0 0 1px rgba(94,106,210,0.3)"; }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = "#5e6ad2"; e.currentTarget.style.boxShadow = "0 1px 3px rgba(94,106,210,0.3), 0 0 0 1px rgba(94,106,210,0.2)"; }}
             >
               <Plus size={14} />
               新對話
@@ -266,7 +266,7 @@ export function Sidebar({ conversations, activeId, onSelect, onDelete, onNew, lo
                 className="group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150"
                 style={
                   conv.id === activeId
-                    ? { backgroundColor: "rgba(255,255,255,0.07)", color: "#f0f1f3" }
+                    ? { backgroundColor: "rgba(94,106,210,0.12)", color: "#f0f1f3", boxShadow: "inset 2px 0 0 #5e6ad2" }
                     : { color: "#9499a5" }
                 }
                 onMouseEnter={e => {

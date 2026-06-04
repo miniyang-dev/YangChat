@@ -207,14 +207,19 @@ export function InputBar({ disabled, onSend }: Props) {
             style={{
               backgroundColor: "#111219",
               border: "1px solid rgba(255,255,255,0.08)",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03)",
             }}
-            onFocusCapture={(e) => {
+            onFocus={e => {
               (e.currentTarget as HTMLDivElement).style.borderColor =
-                "rgba(255,255,255,0.15)";
+                "rgba(94,106,210,0.4)";
+              (e.currentTarget as HTMLDivElement).style.boxShadow =
+                "0 1px 3px rgba(0,0,0,0.3), 0 0 0 3px rgba(94,106,210,0.08), inset 0 1px 0 rgba(255,255,255,0.03)";
             }}
-            onBlurCapture={(e) => {
+            onBlur={e => {
               (e.currentTarget as HTMLDivElement).style.borderColor =
                 "rgba(255,255,255,0.08)";
+              (e.currentTarget as HTMLDivElement).style.boxShadow =
+                "0 1px 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03)";
             }}
           >
             {/* 單一附件按鈕：自動判斷圖片 or 文件 */}
@@ -274,14 +279,16 @@ export function InputBar({ disabled, onSend }: Props) {
               data-testid="send-button"
               disabled={sendDisabled}
               className="p-2 rounded-lg text-white transition-all duration-150 flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
-              style={{ backgroundColor: "#5e6ad2" }}
-              onMouseEnter={(e) => {
+              style={{ backgroundColor: "#5e6ad2", boxShadow: "0 1px 3px rgba(94,106,210,0.4)" }}
+              onMouseEnter={e => {
                 if (!sendDisabled) {
                   (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#6e7ae0";
+                  (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 2px 8px rgba(94,106,210,0.5)";
                 }
               }}
-              onMouseLeave={(e) => {
+              onMouseLeave={e => {
                 (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#5e6ad2";
+                (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 1px 3px rgba(94,106,210,0.4)";
               }}
             >
               <Send size={18} />

@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yang — Refined Dark</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #07080a;
+    color: #f0f1f3;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    background: #0d0e10;
+    border-right: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 1px 0 0 rgba(255,255,255,0.03);
+  }
+  .sidebar-header {
+    padding: 20px 16px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .sidebar-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #52565e;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .new-chat-btn {
+    width: 100%;
+    padding: 9px 12px;
+    background: #5e6ad2;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 150ms ease, box-shadow 150ms ease;
+    box-shadow: 0 1px 3px rgba(94,106,210,0.3), 0 0 0 1px rgba(94,106,210,0.2);
+    font-family: inherit;
+  }
+  .new-chat-btn:hover {
+    background: #6e7ae0;
+    box-shadow: 0 2px 8px rgba(94,106,210,0.4), 0 0 0 1px rgba(94,106,210,0.3);
+  }
+  .search-box {
+    margin: 12px 16px;
+    padding: 8px 12px;
+    background: #111318;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 8px;
+    color: #8a8f9a;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    width: calc(100% - 32px);
+    transition: border-color 150ms, background 150ms;
+  }
+  .search-box:focus { border-color: rgba(94,106,210,0.4); background: #13151a; color: #f0f1f3; }
+  .search-box::placeholder { color: #52565e; }
+  .conv-list { flex: 1; overflow-y: auto; padding: 4px 8px 12px; }
+  .conv-list::-webkit-scrollbar { width: 4px; }
+  .conv-list::-webkit-scrollbar-track { background: transparent; }
+  .conv-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+  .conv-item {
+    padding: 9px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 120ms ease;
+    margin-bottom: 1px;
+  }
+  .conv-item:hover { background: rgba(255,255,255,0.04); }
+  .conv-item.active {
+    background: rgba(94,106,210,0.12);
+    box-shadow: inset 2px 0 0 #5e6ad2;
+  }
+  .conv-title { font-size: 13px; font-weight: 500; color: #d0d4dc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv-item.active .conv-title { color: #f0f1f3; }
+  .conv-preview { font-size: 11px; color: #52565e; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv-time { font-size: 10px; color: #3d4047; margin-top: 3px; }
+
+  /* ── Main ── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #07080a;
+    overflow: hidden;
+  }
+  .topbar {
+    padding: 0 24px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    background: #07080a;
+    flex-shrink: 0;
+  }
+  .topbar-title { font-size: 14px; font-weight: 500; color: #8a8f9a; }
+  .model-select {
+    background: #111318;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px;
+    color: #8a8f9a;
+    font-size: 12px;
+    font-family: inherit;
+    padding: 5px 10px;
+    cursor: pointer;
+    outline: none;
+  }
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .messages::-webkit-scrollbar { width: 4px; }
+  .messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+  .msg-row {
+    display: flex;
+    padding: 0 24px;
+    gap: 12px;
+  }
+  .msg-row.user { justify-content: flex-end; }
+  .avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 2px;
+  }
+  .avatar.ai { background: #1a1d25; border: 1px solid rgba(255,255,255,0.08); color: #8a8f9a; }
+  .bubble {
+    max-width: 520px;
+    padding: 11px 15px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.65;
+  }
+  .bubble.ai {
+    background: #111318;
+    border: 1px solid rgba(255,255,255,0.07);
+    color: #d8dce6;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    border-radius: 4px 12px 12px 12px;
+  }
+  .bubble.user {
+    background: #5e6ad2;
+    color: #fff;
+    box-shadow: 0 1px 4px rgba(94,106,210,0.3), 0 2px 12px rgba(94,106,210,0.15);
+    border-radius: 12px 4px 12px 12px;
+  }
+  .msg-time { font-size: 10px; color: #3d4047; margin-top: 4px; text-align: right; }
+  .msg-row.user .msg-time { text-align: right; }
+
+  /* ── Input ── */
+  .input-area {
+    padding: 16px 24px 20px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    background: #07080a;
+    flex-shrink: 0;
+  }
+  .input-box {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    background: #111318;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 10px 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03);
+    transition: border-color 150ms, box-shadow 150ms;
+  }
+  .input-box:focus-within {
+    border-color: rgba(94,106,210,0.4);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 0 0 3px rgba(94,106,210,0.08), inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+  .attach-btn {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    border: none; background: none;
+    color: #52565e; cursor: pointer; border-radius: 6px;
+    transition: color 120ms, background 120ms;
+    flex-shrink: 0;
+  }
+  .attach-btn:hover { color: #8a8f9a; background: rgba(255,255,255,0.05); }
+  .input-textarea {
+    flex: 1; background: none; border: none; outline: none;
+    color: #f0f1f3; font-size: 14px; font-family: inherit;
+    resize: none; line-height: 1.6; max-height: 160px;
+    overflow-y: auto;
+  }
+  .input-textarea::placeholder { color: #3d4047; }
+  .send-btn {
+    width: 32px; height: 32px;
+    background: #5e6ad2; border: none; border-radius: 7px;
+    color: white; cursor: pointer; display: flex;
+    align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: background 120ms, transform 80ms;
+    box-shadow: 0 1px 3px rgba(94,106,210,0.4);
+  }
+  .send-btn:hover { background: #6e7ae0; }
+  .send-btn:active { transform: scale(0.95); }
+  .input-hint { font-size: 11px; color: #3d4047; text-align: center; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-title">對話</div>
+    <button class="new-chat-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      新對話
+    </button>
+  </div>
+  <input class="search-box" placeholder="搜尋對話..." />
+  <div class="conv-list">
+    <div class="conv-item active">
+      <div class="conv-title">Cloudflare NAT 穿透原理</div>
+      <div class="conv-preview">你的機器主動向 Cloudflare 建立連線...</div>
+      <div class="conv-time">剛剛</div>
+    </div>
+    <div class="conv-item">
+      <div class="conv-title">YangChat UI 設計討論</div>
+      <div class="conv-preview">用 sketch skill 產出 2-3 個樣式</div>
+      <div class="conv-time">10 分鐘前</div>
+    </div>
+    <div class="conv-item">
+      <div class="conv-title">迴紋針 icon 合併</div>
+      <div class="conv-preview">文件與圖片統一成一個上傳入口</div>
+      <div class="conv-time">1 小時前</div>
+    </div>
+    <div class="conv-item">
+      <div class="conv-title">FTS5 全文搜尋實作</div>
+      <div class="conv-preview">SQLite FTS5 虛擬表 + 3 triggers</div>
+      <div class="conv-time">昨天</div>
+    </div>
+    <div class="conv-item">
+      <div class="conv-title">Playwright E2E 測試</div>
+      <div class="conv-preview">11/11 全過，登入、上傳、搜尋...</div>
+      <div class="conv-time">昨天</div>
+    </div>
+    <div class="conv-item">
+      <div class="conv-title">圖片上傳 Gemini 分析</div>
+      <div class="conv-preview">Vision 架構：圖片 → Gemini Flash</div>
+      <div class="conv-time">2 天前</div>
+    </div>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title">Cloudflare NAT 穿透原理</div>
+    <select class="model-select">
+      <option>claude-sonnet-4-6</option>
+      <option>gpt-4o</option>
+    </select>
+  </div>
+
+  <div class="messages">
+    <div class="msg-row">
+      <div class="avatar ai">Y</div>
+      <div>
+        <div class="bubble ai">你好！我是 Yang，有什麼可以幫你的嗎？</div>
+        <div class="msg-time">14:20</div>
+      </div>
+    </div>
+    <div class="msg-row user">
+      <div>
+        <div class="bubble user">Cloudflare 做 NAT 穿透是什麼意思？</div>
+        <div class="msg-time">14:21</div>
+      </div>
+    </div>
+    <div class="msg-row">
+      <div class="avatar ai">Y</div>
+      <div>
+        <div class="bubble ai">Cloudflare Tunnel 的 NAT 穿透原理，一句話講完：<br><br>
+        你的機器主動向 Cloudflare 建立連線，流量「反向」從外往內走，完全不需要開 port 或設定路由器。<br><br>
+        <strong style="color:#a8b0c8">為什麼叫「NAT 穿透」？</strong><br>
+        一般情況下，外網要連進你家的機器，會被 NAT（路由器）擋住。Cloudflare Tunnel 讓你的機器主動發起 HTTPS/QUIC 連線，Cloudflare 幫你接外部流量再反向送進來。</div>
+        <div class="msg-time">14:21</div>
+      </div>
+    </div>
+    <div class="msg-row user">
+      <div>
+        <div class="bubble user">那 Tailscale Funnel 和 Cloudflare Tunnel 哪個比較安全？</div>
+        <div class="msg-time">14:22</div>
+      </div>
+    </div>
+    <div class="msg-row">
+      <div class="avatar ai">Y</div>
+      <div>
+        <div class="bubble ai">安全性排名：<strong style="color:#a8b0c8">Cloudflare Tunnel（最安全）> Tailscale Funnel > ngrok</strong><br><br>
+        Cloudflare 可以加 Zero Trust SSO，完全控制誰能訪問，是三個方案裡最企業級的選擇。</div>
+        <div class="msg-time">14:22</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="input-area">
+    <div class="input-box">
+      <button class="attach-btn" title="上傳檔案">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      </button>
+      <textarea class="input-textarea" placeholder="發送訊息..." rows="1"></textarea>
+      <button class="send-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+    <div class="input-hint">Enter 送出 · Shift+Enter 換行</div>
+  </div>
+</div>
+
+<script>
+  const ta = document.querySelector('.input-textarea');
+  ta.addEventListener('input', () => {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';
+  });
+  document.querySelectorAll('.conv-item').forEach(el => {
+    el.addEventListener('click', () => {
+      document.querySelectorAll('.conv-item').forEach(e => e.classList.remove('active'));
+      el.classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>

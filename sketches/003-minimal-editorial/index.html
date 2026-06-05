@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Yang — Minimal Editorial</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg:            #09090b;
+      --accent:        #5e6ad2;
+      --accent-faint:  rgba(94, 106, 210, 0.06);
+      --border:        rgba(255, 255, 255, 0.07);
+      --input-border:  rgba(255, 255, 255, 0.10);
+      --text-primary:  #f4f4f5;
+      --text-secondary:#71717a;
+      --text-muted:    #3f3f46;
+      --hover-bg:      rgba(255, 255, 255, 0.04);
+      --sidebar-w:     240px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 14px;
+      font-weight: 400;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── Layout ─── */
+    .app {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ─── Sidebar ─── */
+    .sidebar {
+      width: var(--sidebar-w);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 20px 16px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+
+    .logo span {
+      color: var(--accent);
+    }
+
+    .new-chat-btn {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      background: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-radius: 6px;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .new-chat-btn:hover {
+      background: var(--hover-bg);
+      color: var(--text-primary);
+    }
+
+    .new-chat-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .search-wrap {
+      padding: 0 12px 12px;
+    }
+
+    .search-input {
+      width: 100%;
+      background: var(--hover-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--text-secondary);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .search-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .search-input:focus {
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+
+    .nav-label {
+      padding: 6px 16px 4px;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .conv-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 8px 8px;
+    }
+
+    .conv-list::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .conv-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .conv-list::-webkit-scrollbar-thumb {
+      background: var(--text-muted);
+      border-radius: 2px;
+    }
+
+    .conv-item {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      padding: 8px 12px 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.12s;
+      margin-bottom: 1px;
+    }
+
+    .conv-item:hover {
+      background: var(--hover-bg);
+    }
+
+    .conv-item.active {
+      background: var(--hover-bg);
+    }
+
+    .conv-item.active::before {
+      content: '';
+      position: absolute;
+      left: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .conv-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.4;
+    }
+
+    .conv-item:not(.active) .conv-title {
+      color: var(--text-secondary);
+      font-weight: 400;
+    }
+
+    .conv-preview {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+
+    .conv-time {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .sidebar-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+
+    .sidebar-footer:hover {
+      background: var(--hover-bg);
+    }
+
+    .avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .user-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .user-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      line-height: 1.3;
+    }
+
+    .user-plan {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* ─── Main Chat ─── */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .chat-header {
+      padding: 18px 32px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .chat-title {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--text-primary);
+    }
+
+    .chat-model {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .chat-model span {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* ─── Messages ─── */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 32px 0 16px;
+    }
+
+    .messages::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .messages::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .messages::-webkit-scrollbar-thumb {
+      background: var(--text-muted);
+      border-radius: 2px;
+    }
+
+    .msg-group {
+      padding: 16px 32px;
+      position: relative;
+    }
+
+    /* User message */
+    .msg-group.user {
+      background: var(--accent-faint);
+      border-left: 3px solid var(--accent);
+      padding-left: 29px; /* 32 - 3 */
+    }
+
+    /* AI message */
+    .msg-group.ai {
+      border-left: 3px solid transparent;
+    }
+
+    .msg-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .msg-author {
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+
+    .user .msg-author {
+      color: var(--accent);
+    }
+
+    .ai .msg-author {
+      color: var(--text-secondary);
+    }
+
+    .msg-time {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .msg-body {
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--text-primary);
+      line-height: 1.75;
+      max-width: 72ch;
+    }
+
+    .msg-body p {
+      margin-bottom: 10px;
+    }
+
+    .msg-body p:last-child {
+      margin-bottom: 0;
+    }
+
+    .msg-body code {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', monospace;
+      font-size: 12.5px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      color: #a78bfa;
+    }
+
+    .msg-body pre {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 12px 0;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', monospace;
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: #e2e2e6;
+    }
+
+    .msg-body pre .kw { color: #a78bfa; }
+    .msg-body pre .fn { color: #60a5fa; }
+    .msg-body pre .str { color: #34d399; }
+    .msg-body pre .cm { color: var(--text-muted); font-style: italic; }
+    .msg-body pre .num { color: #fb923c; }
+
+    /* ─── Divider ─── */
+    .msg-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 32px;
+      margin: 8px 0;
+    }
+
+    .msg-divider::before,
+    .msg-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .msg-divider span {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    /* ─── Input ─── */
+    .input-area {
+      padding: 16px 32px 24px;
+      border-top: 1px solid var(--border);
+    }
+
+    .input-wrap {
+      position: relative;
+    }
+
+    .input-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .chat-textarea {
+      width: 100%;
+      background: none;
+      border: none;
+      border-bottom: 1px solid var(--input-border);
+      outline: none;
+      resize: none;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--text-primary);
+      line-height: 1.7;
+      padding: 8px 0 12px;
+      min-height: 64px;
+      max-height: 200px;
+      overflow-y: auto;
+      transition: border-color 0.15s;
+    }
+
+    .chat-textarea::placeholder {
+      color: var(--text-muted);
+    }
+
+    .chat-textarea:focus {
+      border-bottom-color: var(--accent);
+    }
+
+    .chat-textarea::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .input-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 10px;
+    }
+
+    .input-hints {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .hint-tag {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .hint-tag kbd {
+      display: inline-block;
+      font-family: inherit;
+      font-size: 10px;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 5px;
+      margin-right: 3px;
+      line-height: 1.5;
+    }
+
+    .send-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      background: var(--accent);
+      border: none;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      color: #fff;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .send-btn:hover {
+      opacity: 0.88;
+    }
+
+    .send-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* ─── Thinking indicator ─── */
+    .thinking {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 16px 32px;
+    }
+
+    .thinking-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+
+    .thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+    .thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes pulse {
+      0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+      40%            { opacity: 1;   transform: scale(1);   }
+    }
+  </style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ─── Sidebar ─── -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">Yang<span>.</span></div>
+      <button class="new-chat-btn" title="新建对话">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="8" y1="3" x2="8" y2="13"/>
+          <line x1="3" y1="8" x2="13" y2="8"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="search-wrap">
+      <input class="search-input" type="text" placeholder="搜索对话…" />
+    </div>
+
+    <div class="nav-label">最近</div>
+
+    <div class="conv-list">
+
+      <div class="conv-item active">
+        <div class="conv-title">Rust 异步运行时分析</div>
+        <div class="conv-preview">tokio 和 async-std 的对比…</div>
+        <div class="conv-time">刚刚</div>
+      </div>
+
+      <div class="conv-item">
+        <div class="conv-title">TypeScript 类型体操</div>
+        <div class="conv-preview">如何实现 DeepReadonly…</div>
+        <div class="conv-time">2h 前</div>
+      </div>
+
+      <div class="conv-item">
+        <div class="conv-title">YangChat 架构设计</div>
+        <div class="conv-preview">消息流的持久化方案讨论…</div>
+        <div class="conv-time">昨天</div>
+      </div>
+
+      <div class="conv-item">
+        <div class="conv-title">PostgreSQL 索引优化</div>
+        <div class="conv-preview">慢查询 explain analyze…</div>
+        <div class="conv-time">昨天</div>
+      </div>
+
+      <div class="conv-item">
+        <div class="conv-title">React Server Components</div>
+        <div class="conv-preview">RSC 和 Suspense 的边界…</div>
+        <div class="conv-time">周二</div>
+      </div>
+
+      <div class="conv-item">
+        <div class="conv-title">Git 钩子与 CI 流水线</div>
+        <div class="conv-preview">pre-commit 集成 lint…</div>
+        <div class="conv-time">周一</div>
+      </div>
+
+      <div class="conv-item">
+        <div class="conv-title">系统设计：消息队列</div>
+        <div class="conv-preview">Kafka 分区策略的选择…</div>
+        <div class="conv-time">上周</div>
+      </div>
+
+      <div class="conv-item">
+        <div class="conv-title">Python 性能分析</div>
+        <div class="conv-preview">使用 py-spy 做火焰图…</div>
+        <div class="conv-time">上周</div>
+      </div>
+
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="avatar">杨</div>
+      <div class="user-info">
+        <div class="user-name">yang</div>
+        <div class="user-plan">Pro · claude-sonnet-4</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ─── Main ─── -->
+  <main class="main">
+    <div class="chat-header">
+      <div class="chat-title">Rust 异步运行时分析</div>
+      <div class="chat-model">模型 <span>claude-sonnet-4</span></div>
+    </div>
+
+    <div class="messages">
+
+      <div class="msg-divider"><span>今天 · 14:32</span></div>
+
+      <!-- User -->
+      <div class="msg-group user">
+        <div class="msg-meta">
+          <span class="msg-author">你</span>
+          <span class="msg-time">14:32</span>
+        </div>
+        <div class="msg-body">
+          <p>我在做一个高并发的网络服务，目前在 tokio 和 async-std 之间选型。能帮我分析一下两者的核心差异吗？主要关注运行时调度策略和生态系统的成熟度。</p>
+        </div>
+      </div>
+
+      <!-- AI -->
+      <div class="msg-group ai">
+        <div class="msg-meta">
+          <span class="msg-author">Yang</span>
+          <span class="msg-time">14:32</span>
+        </div>
+        <div class="msg-body">
+          <p>这是个很好的问题。两者都是优秀的异步运行时，但在设计哲学上有明显差异。</p>
+          <p><strong>调度策略</strong></p>
+          <p>Tokio 使用工作窃取（work-stealing）调度器，默认线程数等于 CPU 核心数。每个工作线程有自己的本地任务队列，空闲时会从其他线程"偷取"任务，这对 CPU 密集型工作负载有较好的负载均衡效果。</p>
+          <p>async-std 的调度器相对简单，更接近 Go 的 goroutine 模型，适合 I/O 密集型场景，但在复杂调度需求下灵活性不如 tokio。</p>
+          <p><strong>生态系统</strong></p>
+          <p>目前 tokio 已经是事实上的标准。主流库如 <code>hyper</code>、<code>tonic</code>、<code>sqlx</code>、<code>axum</code> 都以 tokio 为首选运行时。选择 async-std 意味着你需要处理兼容性问题——很多 crate 只有 tokio feature flag。</p>
+        </div>
+      </div>
+
+      <!-- User -->
+      <div class="msg-group user">
+        <div class="msg-meta">
+          <span class="msg-author">你</span>
+          <span class="msg-time">14:35</span>
+        </div>
+        <div class="msg-body">
+          <p>明白了。那 tokio 的 <code>#[tokio::main]</code> 宏背后具体做了什么？我想手动构建运行时，对启动参数有更多控制。</p>
+        </div>
+      </div>
+
+      <!-- AI -->
+      <div class="msg-group ai">
+        <div class="msg-meta">
+          <span class="msg-author">Yang</span>
+          <span class="msg-time">14:35</span>
+        </div>
+        <div class="msg-body">
+          <p><code>#[tokio::main]</code> 本质上是个过程宏，展开后大致等价于：</p>
+<pre><span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="cm">// 构建多线程运行时</span>
+    <span class="kw">let</span> rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()         <span class="cm">// 启用 I/O 和 time 驱动</span>
+        .build()
+        .unwrap();
+
+    rt.<span class="fn">block_on</span>(<span class="kw">async</span> {
+        <span class="cm">// 你的 async main 逻辑</span>
+        your_async_main().<span class="kw">await</span>;
+    });
+}</pre>
+          <p>如果你需要精细控制，可以直接使用 <code>Builder</code> API：</p>
+<pre><span class="kw">let</span> rt = tokio::runtime::Builder::new_multi_thread()
+    .<span class="fn">worker_threads</span>(<span class="num">4</span>)           <span class="cm">// 固定 4 个工作线程</span>
+    .<span class="fn">max_blocking_threads</span>(<span class="num">64</span>)    <span class="cm">// blocking 线程池上限</span>
+    .<span class="fn">thread_name</span>(<span class="str">"my-worker"</span>)    <span class="cm">// 线程命名，便于调试</span>
+    .<span class="fn">enable_io</span>()
+    .<span class="fn">enable_time</span>()
+    .<span class="fn">build</span>()?;</pre>
+          <p>对于你的高并发场景，建议保留默认的 <code>worker_threads</code>（等于逻辑 CPU 数），除非你有 profiling 数据支撑要修改它。真正需要调优的往往是 <code>max_blocking_threads</code>，避免大量同步 I/O 阻塞线程池。</p>
+        </div>
+      </div>
+
+      <!-- User -->
+      <div class="msg-group user">
+        <div class="msg-meta">
+          <span class="msg-author">你</span>
+          <span class="msg-time">14:38</span>
+        </div>
+        <div class="msg-body">
+          <p>很清楚。另外问一下，<code>spawn_blocking</code> 和直接在 async 块里调用同步函数有什么本质区别？什么时候必须用 <code>spawn_blocking</code>？</p>
+        </div>
+      </div>
+
+      <!-- AI -->
+      <div class="msg-group ai">
+        <div class="msg-meta">
+          <span class="msg-author">Yang</span>
+          <span class="msg-time">14:39</span>
+        </div>
+        <div class="msg-body">
+          <p>这是 Rust 异步编程中一个非常重要的区分。</p>
+          <p>Tokio 的工作线程是"协作式"的——它依赖 Future 主动让出控制权（<code>.await</code> 点）才能调度其他任务。如果你在 async 上下文中直接调用一个耗时的同步操作，这个工作线程会被完全占用，无法处理其他任务，相当于"饿死"了整个线程上的其他 Future。</p>
+          <p><strong>必须使用 <code>spawn_blocking</code> 的场景：</strong></p>
+          <p>① 任何预计耗时超过 ~100μs 的同步计算<br/>② 文件系统操作（<code>std::fs</code> 系列）<br/>③ 调用 C FFI 的阻塞函数<br/>④ 数据库的同步驱动（如果不用 sqlx 这类原生 async 的）</p>
+          <p>Tokio 有一个内置的 "task budget" 机制，会定期检查任务是否长时间占用线程并发出警告，但不会强制抢占。</p>
+        </div>
+      </div>
+
+      <!-- Thinking -->
+      <div class="thinking">
+        <div class="thinking-dot"></div>
+        <div class="thinking-dot"></div>
+        <div class="thinking-dot"></div>
+      </div>
+
+    </div><!-- /messages -->
+
+    <!-- ─── Input ─── -->
+    <div class="input-area">
+      <div class="input-label">消息</div>
+      <div class="input-wrap">
+        <textarea
+          class="chat-textarea"
+          placeholder="继续提问…"
+          rows="2"
+        ></textarea>
+        <div class="input-actions">
+          <div class="input-hints">
+            <span class="hint-tag"><kbd>↵</kbd> 发送</span>
+            <span class="hint-tag"><kbd>⇧</kbd><kbd>↵</kbd> 换行</span>
+          </div>
+          <button class="send-btn">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="14" y1="2" x2="2" y2="8"/>
+              <line x1="14" y1="2" x2="9" y2="14"/>
+              <line x1="14" y1="2" x2="2" y2="8" opacity="0"/>
+              <polyline points="14,2 9,14 2,8 14,2"/>
+            </svg>
+            发送
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  // Auto-resize textarea
+  const ta = document.querySelector('.chat-textarea');
+  ta.addEventListener('input', () => {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
+  });
+
+  // Enter to send (Shift+Enter = newline)
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      // In a real app, submit here
+    }
+  });
+
+  // Sidebar item click
+  document.querySelectorAll('.conv-item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.conv-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+    });
+  });
+</script>
+
+</body>
+</html>

@@ -318,31 +318,31 @@ export function InputBar({ disabled, onSend, onImageGenerated }: Props) {
             }}
           >
             {/* 單一附件按鈕：自動判斷圖片 or 文件 */}
-            <label
-              htmlFor="file-upload"
-              className="p-2 rounded-lg transition-all duration-150 flex-shrink-0 cursor-pointer"
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={disabled || isUploading}
+              className="p-2 rounded-lg transition-all duration-150 flex-shrink-0"
               style={{
                 color: (uploadedImage || uploadedFile) ? "#5e6ad2" : "#62666d",
-                opacity: (disabled || isUploading) ? 0.3 : 1,
-                pointerEvents: (disabled || isUploading) ? "none" : "auto",
+                backgroundColor: "transparent",
               }}
               onMouseEnter={(e) => {
                 if (!disabled && !isUploading) {
-                  (e.currentTarget as HTMLLabelElement).style.color = "#9499a5";
-                  (e.currentTarget as HTMLLabelElement).style.backgroundColor = "rgba(255,255,255,0.05)";
+                  (e.currentTarget as HTMLButtonElement).style.color = "#9499a5";
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(255,255,255,0.05)";
                 }
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget as HTMLLabelElement).style.color =
+                (e.currentTarget as HTMLButtonElement).style.color =
                   (uploadedImage || uploadedFile) ? "#5e6ad2" : "#62666d";
-                (e.currentTarget as HTMLLabelElement).style.backgroundColor = "transparent";
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
               }}
               title="上傳圖片或文件（自動判斷）"
             >
               <Paperclip size={18} />
-            </label>
+            </button>
             <input
-              id="file-upload"
               ref={fileRef}
               type="file"
               accept={ACCEPTED_ALL}

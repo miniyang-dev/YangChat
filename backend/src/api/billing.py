@@ -5,11 +5,12 @@ Billing proxy — 從 Pioneer AI /billing/plan-info 取得 credit 用量，
 Pioneer 實際 API 欄位（2026-06）：
   /billing/plan-info:
     payment_plan       str   e.g. "pro_legacy"
-    credit_limit       float e.g. 10000.0  (USD cents or $?)
-    total_usage        float e.g. 9438.22
-    remaining_credits  float e.g. 561.78
+    credit_limit       float e.g. 10000.0  (帳戶累計上限 $USD)
+    total_usage        float e.g. 5457.12  (帳戶累計已用，非每日)
+    remaining_credits  float e.g. 4542.88  (帳戶剩餘)
 
-前端顯示單位：credits（小數點後 2 位），進度條 = total_usage / credit_limit
+注意：Pioneer 官網另有「每日 $100 免費額度」的 UI 顯示，
+但 /billing/plan-info 只提供帳戶累計數字，沒有每日用量欄位。
 """
 import httpx
 from fastapi import APIRouter, Depends, HTTPException

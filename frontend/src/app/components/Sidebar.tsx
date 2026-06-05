@@ -379,7 +379,7 @@ function UsageBar({ usage }: { usage: BillingUsage }) {
 
       {/* 下排：剩餘 credits */}
       <p className="mt-1.5 text-[10px]" style={{ color: "#4b5563" }}>
-        剩餘&nbsp;
+        帳戶餘額&nbsp;
         <span style={{ color: "#62666d" }}>{fmtCredit(usage.credits_remaining)}</span>
         &nbsp;/&nbsp;{fmtCredit(usage.credits_limit)}
       </p>

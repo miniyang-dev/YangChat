@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # Tavily Search
     TAVILY_API_KEY: str = ""
 
+    # Exa Search（Tavily 額度用盡時的 fallback）
+    EXA_API_KEY: str = ""
+
     # Gemini Vision（圖片描述，再傳給 Pioneer AI）
     GEMINI_API_KEY: str = ""
 

@@ -76,10 +76,17 @@ TOOLS = [
 
 # ── Tavily Search ─────────────────────────────────────────────────────────────
 
+class _TavilyQuotaError(Exception):
+    """Tavily 額度耗盡或 key 無效（HTTP 429 / 401）"""
+
 async def _tavily_search(query: str) -> str:
-    """呼叫 Tavily Search API，回傳格式化的搜尋結果文字"""
+    """
+    呼叫 Tavily Search API，回傳格式化的搜尋結果文字。
+    額度耗盡（429）或 key 無效（401）時拋出 _TavilyQuotaError，
+    讓上層 fallback 到 Exa。
+    """
     if not settings.TAVILY_API_KEY:
-        return "（搜尋功能未設定 API key）"
+        raise _TavilyQuotaError("TAVILY_API_KEY 未設定")
 
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
@@ -89,26 +96,72 @@ async def _tavily_search(query: str) -> str:
                 "query": query,
                 "search_depth": "basic",
                 "max_results": 5,
-                "include_answer": True,        # 讓 Tavily 也給一個摘要答案
+                "include_answer": True,
             },
         )
-        resp.raise_for_status()
-        data = resp.json()
+
+    # 額度耗盡或 key 無效 → 交給 fallback
+    if resp.status_code in (401, 429):
+        raise _TavilyQuotaError(f"Tavily HTTP {resp.status_code}")
+
+    resp.raise_for_status()   # 其他 5xx 也算失敗，同樣 fallback
+    data = resp.json()
 
     lines = []
-
-    # 如果 Tavily 有直接答案
     if data.get("answer"):
         lines.append(f"摘要：{data['answer']}\n")
-
-    # 列出各筆搜尋結果
     for i, r in enumerate(data.get("results", []), 1):
-        title = r.get("title", "")
-        url = r.get("url", "")
-        content = r.get("content", "").strip()[:300]   # 限制長度
+        title   = r.get("title", "")
+        url     = r.get("url", "")
+        content = r.get("content", "").strip()[:300]
         lines.append(f"[{i}] {title}\n{content}\n來源：{url}")
 
     return "\n\n".join(lines) if lines else "（無搜尋結果）"
+
+
+# ── Exa Search（fallback）─────────────────────────────────────────────────────
+
+async def _exa_search(query: str) -> str:
+    """
+    Exa Search API fallback。
+    Endpoint: POST https://api.exa.ai/search
+    Auth: x-api-key header
+    """
+    if not settings.EXA_API_KEY:
+        return "（搜尋功能暫時無法使用：Tavily 額度已耗盡，且 Exa API key 未設定）"
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            "https://api.exa.ai/search",
+            headers={
+                "x-api-key": settings.EXA_API_KEY,
+                "Content-Type": "application/json",
+            },
+            json={
+                "query": query,
+                "numResults": 5,
+                "contents": {
+                    "text": {"maxCharacters": 300},
+                },
+            },
+        )
+
+    if not resp.is_success:
+        return f"（搜尋失敗：Tavily 已耗盡，Exa 回傳 HTTP {resp.status_code}）"
+
+    data = resp.json()
+    results = data.get("results", [])
+    if not results:
+        return "（無搜尋結果）"
+
+    lines = []
+    for i, r in enumerate(results, 1):
+        title   = r.get("title", "")
+        url     = r.get("url", "")
+        content = (r.get("text") or "").strip()[:300]
+        lines.append(f"[{i}] {title}\n{content}\n來源：{url}")
+
+    return "\n\n".join(lines)
 
 
 # ── OpenAI Client ─────────────────────────────────────────────────────────────
@@ -137,14 +190,22 @@ def build_content(text: str, images: Optional[list] = None):
 # ── Tool Executor ─────────────────────────────────────────────────────────────
 
 async def _execute_tool(name: str, arguments: str) -> str:
-    """執行工具，回傳結果字串"""
+    """執行工具，回傳結果字串。web_search 失敗時自動 fallback 到 Exa。"""
     try:
         args = json.loads(arguments)
     except json.JSONDecodeError:
         return "（工具參數解析失敗）"
 
     if name == "web_search":
-        return await _tavily_search(args.get("query", ""))
+        query = args.get("query", "")
+        try:
+            return await _tavily_search(query)
+        except _TavilyQuotaError:
+            # Tavily 額度耗盡或 key 問題 → 自動切換 Exa
+            return await _exa_search(query)
+        except Exception:
+            # 其他失敗（網路、timeout 等）也 fallback
+            return await _exa_search(query)
 
     return f"（未知工具：{name}）"
 

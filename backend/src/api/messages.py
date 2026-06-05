@@ -44,10 +44,10 @@ def _build_user_content_with_file(content: str, images: list | None, file_contex
 async def send_message(
     body: SendMessageRequest,
     db: aiosqlite.Connection = Depends(db_dep),
-    _: str = Depends(get_current_user),
+    current_user: str = Depends(get_current_user),
 ):
     """非 streaming：回傳完整 assistant 訊息"""
-    conv = await db_service.get_conversation(db, body.conversation_id)
+    conv = await db_service.get_conversation(db, body.conversation_id, user_id=current_user)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
@@ -95,10 +95,10 @@ async def stream_message(
     body: SendMessageRequest,
     background_tasks: BackgroundTasks,
     db: aiosqlite.Connection = Depends(db_dep),
-    _: str = Depends(get_current_user),
+    current_user: str = Depends(get_current_user),
 ):
     """SSE streaming — B-C3: 用 BackgroundTask 確保斷線也能存入 assistant 訊息"""
-    conv = await db_service.get_conversation(db, body.conversation_id)
+    conv = await db_service.get_conversation(db, body.conversation_id, user_id=current_user)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
@@ -192,10 +192,10 @@ async def regenerate_message(
     body: RegenerateRequest,
     background_tasks: BackgroundTasks,
     db: aiosqlite.Connection = Depends(db_dep),
-    _: str = Depends(get_current_user),
+    current_user: str = Depends(get_current_user),
 ):
     """重新生成指定 assistant 訊息：找到它前一則 user 訊息，截斷後重新 stream。"""
-    conv = await db_service.get_conversation(db, body.conversation_id)
+    conv = await db_service.get_conversation(db, body.conversation_id, user_id=current_user)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
 

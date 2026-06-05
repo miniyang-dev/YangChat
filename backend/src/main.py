@@ -5,7 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from src.database import init_db
-from src.api import auth, conversations, messages, models, upload, export, search, billing
+from src.api import auth, conversations, messages, models, upload, export, search, billing, admin
+from src.api.auth import bootstrap_admin
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -16,6 +17,7 @@ IMAGES_DIR = Path("/data/images")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await bootstrap_admin()
     IMAGES_DIR.mkdir(parents=True, exist_ok=True)
     yield
 
@@ -39,6 +41,7 @@ app.include_router(upload.router,        prefix="/api")
 app.include_router(export.router,        prefix="/api")
 app.include_router(search.router,        prefix="/api")
 app.include_router(billing.router,       prefix="/api")
+app.include_router(admin.router,         prefix="/api/admin")
 
 # 產圖靜態路由：/api/images/<filename>（確保目錄存在再 mount）
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)

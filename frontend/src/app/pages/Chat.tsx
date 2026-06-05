@@ -7,7 +7,7 @@ import { ModelSelector } from "../components/ModelSelector";
 import { SystemPromptPanel } from "../components/SystemPromptPanel";
 import { useConversations } from "../hooks/useConversations";
 import { useChat } from "../hooks/useChat";
-import { createConversation, getConversation, listModels, exportPptx, generateImage, updateSystemPrompt, getBillingUsage } from "../services/api";
+import { createConversation, getConversation, listModels, exportPptx, generateImage, updateSystemPrompt, getBillingUsage, getMyRole } from "../services/api";
 import type { BillingUsage } from "../services/api";
 import type { ModelInfo, Message } from "../types";
 import { Download, Settings2 } from "lucide-react";
@@ -24,6 +24,7 @@ export function Chat() {
   const [pptxError, setPptxError] = useState<string>("");
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
   const [billingUsage, setBillingUsage] = useState<BillingUsage | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // F-C3: 用 ref 追蹤「目前應顯示哪個對話」，防止 race condition
   const activeIdRef = useRef<string | null>(null);
@@ -49,6 +50,11 @@ export function Chat() {
     fetchUsage();
     const timer = setInterval(fetchUsage, 5 * 60 * 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  // 取得目前登入者 role（決定是否顯示 admin 入口）
+  useEffect(() => {
+    getMyRole().then(r => setIsAdmin(r.role === "admin")).catch(() => {});
   }, []);
 
   // 新建對話後，背景等 AI 命名完成再更新 sidebar 標題
@@ -269,6 +275,7 @@ export function Chat() {
         onNew={handleNew}
         loadError={loadError}
         usage={billingUsage}
+        isAdmin={isAdmin}
       />
 
       <div className="flex-1 flex flex-col min-w-0">

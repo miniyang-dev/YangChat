@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Trash2, Plus, Search, X, Clock, User, Bot, Zap } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Trash2, Plus, Search, X, Clock, User, Bot, Zap, Settings } from "lucide-react";
 import type { Conversation } from "../types";
 import { searchMessages } from "../services/api";
 import type { SearchResult, BillingUsage } from "../services/api";
@@ -12,6 +13,7 @@ interface Props {
   onNew: () => void;
   loadError?: string;
   usage?: BillingUsage | null;
+  isAdmin?: boolean;
 }
 
 // snippet 中的 **keyword** 轉為 <mark> 高亮
@@ -35,7 +37,8 @@ function SnippetHighlight({ text }: { text: string }) {
   );
 }
 
-export function Sidebar({ conversations, activeId, onSelect, onDelete, onNew, loadError, usage }: Props) {
+export function Sidebar({ conversations, activeId, onSelect, onDelete, onNew, loadError, usage, isAdmin }: Props) {
+  const navigate = useNavigate();
   const [searchMode, setSearchMode] = useState(false);
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"all" | "user" | "assistant">("all");
@@ -300,10 +303,32 @@ export function Sidebar({ conversations, activeId, onSelect, onDelete, onNew, lo
         )}
       </div>
 
-      {/* ── 底部用量 footer ── */}
-      {usage && (
-        <UsageBar usage={usage} />
-      )}
+      {/* ── 底部 footer ── */}
+      <div className="flex-shrink-0">
+        {/* Admin 入口（僅 admin 可見） */}
+        {isAdmin && (
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }} className="px-3 py-2">
+            <button
+              onClick={() => navigate("/admin")}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-left"
+              style={{ color: "#62666d" }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(255,255,255,0.05)";
+                (e.currentTarget as HTMLButtonElement).style.color = "#d0d4dc";
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
+                (e.currentTarget as HTMLButtonElement).style.color = "#62666d";
+              }}
+            >
+              <Settings size={14} />
+              <span className="text-[12px]">帳號管理</span>
+            </button>
+          </div>
+        )}
+        {/* 用量 bar */}
+        {usage && <UsageBar usage={usage} />}
+      </div>
     </div>
   );
 }

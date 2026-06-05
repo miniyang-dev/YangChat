@@ -11,30 +11,31 @@ def now_iso() -> str:
 
 # ── Conversations ──────────────────────────────────────────
 
-async def list_conversations(db: Connection) -> list:
+async def list_conversations(db: Connection, user_id: str) -> list:
     async with db.execute(
-        "SELECT id, title, model, system_prompt, updated_at FROM conversations ORDER BY updated_at DESC"
+        "SELECT id, title, model, system_prompt, updated_at FROM conversations WHERE user_id=? ORDER BY updated_at DESC",
+        (user_id,)
     ) as cur:
         rows = await cur.fetchall()
     return [dict(r) for r in rows]
 
 
-async def create_conversation(db: Connection, model: str, title: str) -> dict:
+async def create_conversation(db: Connection, model: str, title: str, user_id: str) -> dict:
     conv_id = str(uuid.uuid4())
     now = now_iso()
     clean_title = title[:50].strip() or "新對話"
     await db.execute(
-        "INSERT INTO conversations (id, title, model, system_prompt, created_at, updated_at) VALUES (?,?,?,?,?,?)",
-        (conv_id, clean_title, model, "", now, now)
+        "INSERT INTO conversations (id, user_id, title, model, system_prompt, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+        (conv_id, user_id, clean_title, model, "", now, now)
     )
     await db.commit()
     return {"id": conv_id, "title": clean_title, "model": model,
             "system_prompt": "", "created_at": now, "updated_at": now, "messages": []}
 
 
-async def get_conversation(db: Connection, conv_id: str) -> Optional[dict]:
+async def get_conversation(db: Connection, conv_id: str, user_id: str) -> Optional[dict]:
     async with db.execute(
-        "SELECT * FROM conversations WHERE id=?", (conv_id,)
+        "SELECT * FROM conversations WHERE id=? AND user_id=?", (conv_id, user_id)
     ) as cur:
         row = await cur.fetchone()
     if not row:
@@ -44,33 +45,33 @@ async def get_conversation(db: Connection, conv_id: str) -> Optional[dict]:
     return conv
 
 
-async def rename_conversation(db: Connection, conv_id: str, title: str) -> bool:
+async def rename_conversation(db: Connection, conv_id: str, title: str, user_id: str) -> bool:
     """更新對話標題，回傳是否成功"""
     async with db.execute(
-        "UPDATE conversations SET title=?, updated_at=datetime('now') WHERE id=?",
-        (title, conv_id),
+        "UPDATE conversations SET title=?, updated_at=datetime('now') WHERE id=? AND user_id=?",
+        (title, conv_id, user_id),
     ) as cur:
         await db.commit()
         return cur.rowcount > 0
 
 
-async def update_system_prompt(db: Connection, conv_id: str, system_prompt: str) -> bool:
+async def update_system_prompt(db: Connection, conv_id: str, system_prompt: str, user_id: str) -> bool:
     """更新對話 system prompt，回傳是否成功"""
     async with db.execute(
-        "UPDATE conversations SET system_prompt=?, updated_at=datetime('now') WHERE id=?",
-        (system_prompt, conv_id),
+        "UPDATE conversations SET system_prompt=?, updated_at=datetime('now') WHERE id=? AND user_id=?",
+        (system_prompt, conv_id, user_id),
     ) as cur:
         await db.commit()
         return cur.rowcount > 0
 
 
-async def delete_conversation(db: Connection, conv_id: str) -> bool:
+async def delete_conversation(db: Connection, conv_id: str, user_id: str) -> bool:
     async with db.execute(
-        "SELECT id FROM conversations WHERE id=?", (conv_id,)
+        "SELECT id FROM conversations WHERE id=? AND user_id=?", (conv_id, user_id)
     ) as cur:
         if not await cur.fetchone():
             return False
-    await db.execute("DELETE FROM conversations WHERE id=?", (conv_id,))
+    await db.execute("DELETE FROM conversations WHERE id=? AND user_id=?", (conv_id, user_id))
     await db.commit()
     return True
 

@@ -379,3 +379,53 @@ export async function getBillingUsage(): Promise<BillingUsage> {
   }
   return res.json();
 }
+
+// --- Admin ---
+export interface AdminUser {
+  username: string;
+  role: "admin" | "user";
+  created_at: string;
+}
+
+export interface CreateUserPayload {
+  username: string;
+  password: string;
+  role: "admin" | "user";
+}
+
+export interface UpdateUserPayload {
+  password?: string;
+  role?: "admin" | "user";
+}
+
+export async function getMyRole(): Promise<{ username: string; role: string }> {
+  return req("/admin/me/role", { headers: headers() });
+}
+
+export async function listUsers(): Promise<AdminUser[]> {
+  return req("/admin/users", { headers: headers() });
+}
+
+export async function createUser(payload: CreateUserPayload): Promise<AdminUser> {
+  return req("/admin/users", {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateUser(username: string, payload: UpdateUserPayload): Promise<AdminUser> {
+  return req(`/admin/users/${encodeURIComponent(username)}`, {
+    method: "PATCH",
+    headers: headers(),
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteUser(username: string): Promise<{ success: boolean; message: string }> {
+  return req(`/admin/users/${encodeURIComponent(username)}`, {
+    method: "DELETE",
+    headers: headers(),
+  });
+}
+

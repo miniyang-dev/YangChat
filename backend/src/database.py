@@ -27,19 +27,29 @@ async def get_db() -> aiosqlite.Connection:
     return db
 
 
-async def init_db():
+async def init_db():  # noqa: C901
     Path(settings.DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(settings.DB_PATH) as db:
         await db.execute("PRAGMA foreign_keys=ON")
         await db.executescript("""
+            CREATE TABLE IF NOT EXISTS users (
+                id          TEXT PRIMARY KEY,
+                username    TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role        TEXT NOT NULL DEFAULT 'user',
+                created_at  TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS conversations (
                 id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL DEFAULT '',
                 title TEXT NOT NULL,
                 model TEXT NOT NULL,
                 system_prompt TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+
             CREATE TABLE IF NOT EXISTS messages (
                 id TEXT PRIMARY KEY,
                 conversation_id TEXT NOT NULL
@@ -87,9 +97,39 @@ async def init_db():
                     VALUES (new.rowid, new.content, new.conversation_id, new.role, new.created_at);
                 END;
         """)
-        # Migration：為舊 DB 補 system_prompt 欄位（若已存在則忽略）
+        # ── Migrations（舊 DB 補欄位）────────────────────────────────────────
+        # users 表（新功能，舊 DB 沒有）
+        try:
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id          TEXT PRIMARY KEY,
+                    username    TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    role        TEXT NOT NULL DEFAULT 'user',
+                    created_at  TEXT NOT NULL
+                )
+            """)
+            await db.commit()
+        except Exception:
+            pass
+
+        # conversations.user_id（舊 DB 沒有此欄）
+        try:
+            await db.execute("ALTER TABLE conversations ADD COLUMN user_id TEXT NOT NULL DEFAULT ''")
+            await db.commit()
+        except Exception:
+            pass
+
+        # user_id index（欄位存在後才建）
+        try:
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id)")
+            await db.commit()
+        except Exception:
+            pass
+
+        # conversations.system_prompt（更早期舊 DB）
         try:
             await db.execute("ALTER TABLE conversations ADD COLUMN system_prompt TEXT NOT NULL DEFAULT ''")
             await db.commit()
         except Exception:
-            pass  # 欄位已存在，忽略
+            pass

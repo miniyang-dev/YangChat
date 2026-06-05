@@ -1,14 +1,34 @@
 import hmac
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
+
+import bcrypt
 from fastapi import APIRouter, HTTPException
 from jose import jwt, JWTError, ExpiredSignatureError
+
 from src.config import settings
+from src.database import get_db_ctx
 from src.models.schemas import LoginRequest, LoginResponse
 
 router = APIRouter(tags=["auth"])
 logger = logging.getLogger(__name__)
 
+
+# ── Password helpers ──────────────────────────────────────────────────────────
+
+def hash_password(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    try:
+        return bcrypt.checkpw(plain.encode(), hashed.encode())
+    except Exception:
+        return False
+
+
+# ── JWT ───────────────────────────────────────────────────────────────────────
 
 def create_token(username: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(hours=settings.JWT_EXPIRATION_HOURS)
@@ -30,19 +50,46 @@ def verify_token(token: str) -> str:
         raise HTTPException(status_code=401, detail="Token 無效")
 
 
-def _safe_compare(a: str, b: str) -> bool:
-    """B-C2: timing-safe 字串比對，防止 timing side-channel 攻擊"""
-    return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
+# ── Bootstrap ─────────────────────────────────────────────────────────────────
 
+async def bootstrap_admin() -> None:
+    """
+    若 users 表為空，自動用 .env 的 CHAT_USERNAME / CHAT_PASSWORD
+    建立第一個 admin 帳號，確保向下相容。
+    """
+    username = settings.CHAT_USERNAME
+    password = settings.CHAT_PASSWORD
+    if not username or not password:
+        return
+
+    async with get_db_ctx() as db:
+        async with db.execute("SELECT COUNT(*) FROM users") as cur:
+            row = await cur.fetchone()
+            count = row[0] if row else 0
+
+        if count == 0:
+            now = datetime.now(timezone.utc).isoformat()
+            await db.execute(
+                "INSERT INTO users (id, username, password_hash, role, created_at) VALUES (?,?,?,?,?)",
+                (str(uuid.uuid4()), username, hash_password(password), "admin", now),
+            )
+            await db.commit()
+            logger.info("Bootstrap: admin '%s' 建立完成", username)
+
+
+# ── Login ─────────────────────────────────────────────────────────────────────
 
 @router.post("/login", response_model=LoginResponse)
 async def login(req: LoginRequest):
-    # B-C2: 使用 timing-safe 比對
-    username_ok = _safe_compare(req.username, settings.CHAT_USERNAME)
-    password_ok = _safe_compare(req.password, settings.CHAT_PASSWORD)
-    if not (username_ok and password_ok):
-        # 不透露是帳號還是密碼錯誤
+    async with get_db_ctx() as db:
+        async with db.execute(
+            "SELECT password_hash FROM users WHERE username = ?", (req.username,)
+        ) as cur:
+            row = await cur.fetchone()
+
+    if row is None or not verify_password(req.password, row["password_hash"]):
         return LoginResponse(success=False, message="帳號或密碼錯誤")
+
     token = create_token(req.username)
     return LoginResponse(success=True, token=token, message="登入成功")
 

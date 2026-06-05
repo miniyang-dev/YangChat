@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "./index.css";
 import { Login } from "./app/pages/Login";
 import { Chat } from "./app/pages/Chat";
+import { AdminPage } from "./app/pages/AdminPage";
 import { ProtectedRoute } from "./app/components/ProtectedRoute";
 import { ErrorBoundary } from "./app/components/ErrorBoundary";
 
@@ -19,6 +20,14 @@ createRoot(document.getElementById("root")!).render(
             element={
               <ProtectedRoute>
                 <Chat />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <AdminPage />
               </ProtectedRoute>
             }
           />

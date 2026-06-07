@@ -52,11 +52,11 @@ test.describe("YangChat E2E", () => {
     await expect(page.getByTestId("send-button")).toBeDisabled();
   });
 
-  // 3. 附件按鈕（合併後只剩一個迴紋針）
-  test("只有一個附件 label", async ({ page }) => {
+  // 3. 附件按鈕（合併後只剩一個迴紋針 button，不再用 label）
+  test("只有一個附件按鈕", async ({ page }) => {
     await login(page);
     await page.getByRole("button", { name: "新對話" }).click();
-    await expect(page.locator('label[for="file-upload"]')).toHaveCount(1);
+    await expect(page.locator('button[title="上傳圖片或文件（自動判斷）"]')).toHaveCount(1);
   });
 
   test("點迴紋針觸發選擇器且 accept 含圖片與文件", async ({ page }) => {
@@ -64,7 +64,7 @@ test.describe("YangChat E2E", () => {
     await page.getByRole("button", { name: "新對話" }).click();
     const [fileChooser] = await Promise.all([
       page.waitForEvent("filechooser", { timeout: 5000 }),
-      page.locator('label[for="file-upload"]').click(),
+      page.locator('button[title="上傳圖片或文件（自動判斷）"]').click(),
     ]);
     expect(fileChooser).toBeTruthy();
     const accept = await fileChooser.element().getAttribute("accept") ?? "";
@@ -82,7 +82,7 @@ test.describe("YangChat E2E", () => {
 
     const [fileChooser] = await Promise.all([
       page.waitForEvent("filechooser", { timeout: 5000 }),
-      page.locator('label[for="file-upload"]').click(),
+      page.locator('button[title="上傳圖片或文件（自動判斷）"]').click(),
     ]);
     await fileChooser.setFiles(tmpFile);
 

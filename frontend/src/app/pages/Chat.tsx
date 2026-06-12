@@ -48,7 +48,7 @@ export function Chat() {
       getBillingUsage().then(setBillingUsage).catch(() => {/* 靜默失敗，不影響主功能 */});
     };
     fetchUsage();
-    const timer = setInterval(fetchUsage, 5 * 60 * 1000);
+    const timer = setInterval(fetchUsage, 60 * 60 * 1000);
     return () => clearInterval(timer);
   }, []);
 
